@@ -10,7 +10,9 @@ const hasIosGooglePlist = fs.existsSync(
   path.resolve(__dirname, iosGoogleServicesFile),
 );
 const tmdbApiKey =
-  process.env.TMDB_API_KEY || process.env.EXPO_PUBLIC_TMDB_API_KEY || '';
+  process.env.TMDB_API_KEY ||
+  process.env.EXPO_PUBLIC_TMDB_API_KEY ||
+  'fb7bb23f03b6994dafc674c074d01761';
 const proxyApiUrl =
   process.env.PROXY_API_URL ||
   process.env.EXPO_PUBLIC_PROXY_API_URL ||
@@ -22,8 +24,8 @@ module.exports = () => {
   const IS_TV = process.env.EXPO_TV === '1' || process.env.APP_VARIANT === 'tv';
   const HAS_FIREBASE =
     !IS_PLAYSTORE && (hasAndroidGoogleServices || hasIosGooglePlist);
-  const PACKAGE_NAME = IS_PLAYSTORE ? 'vega.app' : 'com.vega';
-  const APP_SCHEME = IS_PLAYSTORE ? 'vegaapp' : 'com.vega';
+  const PACKAGE_NAME = IS_PLAYSTORE ? 'dentertainment.app' : 'com.dentertainment';
+  const APP_SCHEME = IS_PLAYSTORE ? 'dentertainment' : 'com.dentertainment';
   const plugins = [
     './plugins/with-custom-native-modules.js',
     './plugins/android-native-config.js',
@@ -91,7 +93,7 @@ module.exports = () => {
               enable: true,
               reset: false,
               include: ['armeabi-v7a', 'arm64-v8a'],
-              universalApk: true,
+              universalApk: false,
             },
           },
           buildVariants: {
@@ -135,15 +137,15 @@ module.exports = () => {
   ];
   return {
     expo: {
-      name: 'Vega',
+      name: 'D Entertainment',
       scheme: APP_SCHEME,
-      displayName: 'Vega',
+      displayName: 'D Entertainment',
       jsEngine: 'hermes',
       newArchEnabled: true,
       autolinking: {exclude: ['expo-splash-screen']},
       plugins,
-      slug: 'vega',
-      version: '5.0.3',
+      slug: 'd-entertainment',
+      version: '1.0.0',
       userInterfaceStyle: 'dark',
       experiments: {
         reactCompiler: true,

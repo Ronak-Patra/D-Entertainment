@@ -11,9 +11,10 @@ import {isTV} from '../../../../lib/tv/constants';
 interface CastPageProps {
   data: TmdbStoryData;
   onInteract?: () => void;
+  onPersonPress?: (id: string | number, name: string) => void;
 }
 
-export const CastPage: React.FC<CastPageProps> = ({ data, onInteract }) => {
+export const CastPage: React.FC<CastPageProps> = ({ data, onInteract, onPersonPress }) => {
   const colors = useM3Colors();
 
   return (
@@ -29,7 +30,9 @@ export const CastPage: React.FC<CastPageProps> = ({ data, onInteract }) => {
               focusScale={1.03}
               onPress={() => {
                 onInteract?.();
-                if (
+                if (onPersonPress && person.id) {
+                  onPersonPress(person.id, person.name);
+                } else if (
                   typeof person.id === 'string' &&
                   person.id.startsWith('nm')
                 ) {

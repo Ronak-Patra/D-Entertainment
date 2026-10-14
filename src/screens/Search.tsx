@@ -1,11 +1,13 @@
-import {View, FlatList, Text, Keyboard} from 'react-native';
+import {View, FlatList, Text, Keyboard, TouchableOpacity, ScrollView} from 'react-native';
 import React, {useState, useEffect, useCallback, memo, useRef} from 'react';
-import {useNavigation} from '@react-navigation/native';
+import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {SearchStackParamList, TabStackParamList} from '../App';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import {MMKV} from '../lib/Mmkv';
+import DropdownField from '../components/ui/DropdownField';
+import Button from '../components/ui/Button';
 import ScreenSafeArea from '../components/ui/ScreenSafeArea';
 import Animated, {FadeInDown} from 'react-native-reanimated';
 import {searchOMDB} from '../lib/services/omdb';
@@ -14,7 +16,7 @@ import {fetchIMDbSuggestions, type IMDbSuggestion} from '../lib/services/imdbSug
 import {sanitizeSearchQuery} from '../lib/utils/helpers';
 import SearchSuggestions from '../components/search/SearchSuggestions';
 import SearchHistory from '../components/search/SearchHistory';
-import Button from '../components/ui/Button';
+
 import IconButton from '../components/ui/IconButton';
 import AppText from '../components/ui/Text';
 import SearchField, {type SearchFieldRef} from '../components/ui/SearchField';
@@ -102,6 +104,9 @@ const Search = () => {
   const navigation =
     useNavigation<NativeStackNavigationProp<SearchStackParamList>>();
   const [searchText, setSearchText] = useState('');
+  const [selectedGenre, setSelectedGenre] = useState('');
+  const [selectedYear, setSelectedYear] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState('');
   const [searchFieldNode, setSearchFieldNode] = useState<number | null>(null);
   const [clearBtnNode, setClearBtnNode] = useState<number | null>(null);
   const [firstItemNode, setFirstItemNode] = useState<number | null>(null);
@@ -110,10 +115,34 @@ const Search = () => {
     MMKV.getArray<string>('searchHistory') || [],
   );
   const [searchResults, setSearchResults] = useState<OMDBResult[]>([]);
+  const [activeTab, setActiveTab] = useState<'recent' | 'advanced'>('recent');
+  const route = useRoute<RouteProp<SearchStackParamList, 'Search'>>();
   const searchFieldRef = useRef<SearchFieldRef>(null);
-  const focusAfterTabResetRef = useRef(false);
   const suppressSuggestionsRef = useRef(false);
+  const lastResetKeyRef = useRef<number | undefined>(undefined);
 
+  const resetToDefaultPage = useCallback(() => {
+    suppressSuggestionsRef.current = false;
+    setSearchText('');
+    setSuggestions([]);
+    setSearchResults([]);
+    setSelectedGenre('');
+    setSelectedYear('');
+    setSelectedCountry('');
+    setActiveTab('recent');
+    Keyboard.dismiss();
+    searchFieldRef.current?.blur();
+  }, []);
+
+  // Reset when App.tsx delivers a new resetKey param upon tab press
+  useEffect(() => {
+    if (route.params?.resetKey && route.params.resetKey !== lastResetKeyRef.current) {
+      lastResetKeyRef.current = route.params.resetKey;
+      resetToDefaultPage();
+    }
+  }, [route.params?.resetKey, resetToDefaultPage]);
+
+  // Direct bottom tab press listener fallback
   useEffect(() => {
     const tabNavigation =
       navigation.getParent<BottomTabNavigationProp<TabStackParamList>>();
@@ -123,36 +152,28 @@ const Search = () => {
 
     const unsubscribeTabPress = tabNavigation.addListener('tabPress', event => {
       const state = tabNavigation.getState();
-      if (state.routes[state.index]?.name !== 'SearchStack') {
+      const targetRoute = state.routes.find(r => r.key === event.target);
+      const isSearchTab =
+        targetRoute?.name === 'SearchStack' ||
+        (typeof event.target === 'string' && event.target.startsWith('SearchStack'));
+      if (!isSearchTab) {
         return;
       }
 
       if (!navigation.isFocused()) {
-        event.preventDefault();
-        focusAfterTabResetRef.current = true;
-        navigation.popToTop();
-        return;
+        try {
+          navigation.popToTop();
+        } catch {
+          // ignore
+        }
       }
-
-      if (!isTV) {
-        searchFieldRef.current?.focus();
-      }
-    });
-    const unsubscribeFocus = navigation.addListener('focus', () => {
-      if (!focusAfterTabResetRef.current) {
-        return;
-      }
-      focusAfterTabResetRef.current = false;
-      if (!isTV) {
-        searchFieldRef.current?.focus();
-      }
+      resetToDefaultPage();
     });
 
     return () => {
       unsubscribeTabPress();
-      unsubscribeFocus();
     };
-  }, [navigation]);
+  }, [navigation, resetToDefaultPage]);
 
   // Debounced IMDb search suggestions (spelling completer). The timers live
   // in effects so the screen stays compatible with React Compiler.
@@ -333,7 +354,7 @@ const Search = () => {
               onChangeText={handleTextChange}
               onSubmit={handleSearch}
               onClear={handleClear}
-              placeholder="Search anime..."
+              placeholder="Search movies, shows..."
               nextFocusDown={firstItemNode}
               nextFocusRight={isTV && searchText.length > 0 ? clearBtnNode : undefined}
               onNodeHandle={setSearchFieldNode}
@@ -382,40 +403,245 @@ const Search = () => {
                 keyboardShouldPersistTaps="handled"
               />
             </TVFocusGuide>
-          ) : searchHistory.length > 0 ? (
-            <View style={{flex: 1}}>
-              <SearchHistory
-                history={searchHistory}
-                onSelectSearch={handleSearch}
-                onRemoveSearch={removeHistoryItem}
-                onClearHistory={clearHistory}
-                searchFieldNodeHandle={searchFieldNode}
-                onFirstItemNodeHandle={setFirstItemNode}
-              />
-            </View>
           ) : (
-            // Empty State - Only show when no history and no results
-            <AnimatedContainer
-              entering={FadeInDown.duration(300)}
-              className="items-center justify-center flex-1 px-8">
-              <View className="mb-5 rounded-[28px] bg-m3-secondary-container p-7">
-                <MaterialCommunityIcons
-                  name="magnify"
-                  size={32}
-                  color={colors.onSecondaryContainer}
-                />
+            <View style={{flex: 1}}>
+              {/* Tab Selector when not searching */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  paddingHorizontal: 16,
+                  paddingBottom: 12,
+                  gap: 10,
+                }}>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => setActiveTab('recent')}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 20,
+                    backgroundColor:
+                      activeTab === 'recent'
+                        ? colors.primary
+                        : colors.surfaceContainerHigh,
+                  }}>
+                  <MaterialCommunityIcons
+                    name="history"
+                    size={16}
+                    color={
+                      activeTab === 'recent'
+                        ? colors.onPrimary
+                        : colors.onSurfaceVariant
+                    }
+                    style={{marginRight: 6}}
+                  />
+                  <AppText
+                    role="labelLarge"
+                    style={{
+                      color:
+                        activeTab === 'recent'
+                          ? colors.onPrimary
+                          : colors.onSurface,
+                      fontWeight: activeTab === 'recent' ? '700' : '500',
+                    }}>
+                    Recent Searches {searchHistory.length > 0 ? `(${searchHistory.length})` : ''}
+                  </AppText>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => setActiveTab('advanced')}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 20,
+                    backgroundColor:
+                      activeTab === 'advanced'
+                        ? colors.primary
+                        : colors.surfaceContainerHigh,
+                  }}>
+                  <MaterialCommunityIcons
+                    name="filter-variant"
+                    size={16}
+                    color={
+                      activeTab === 'advanced'
+                        ? colors.onPrimary
+                        : colors.onSurfaceVariant
+                    }
+                    style={{marginRight: 6}}
+                  />
+                  <AppText
+                    role="labelLarge"
+                    style={{
+                      color:
+                        activeTab === 'advanced'
+                          ? colors.onPrimary
+                          : colors.onSurface,
+                      fontWeight: activeTab === 'advanced' ? '700' : '500',
+                    }}>
+                    Advanced Search
+                  </AppText>
+                </TouchableOpacity>
               </View>
-              <AppText
-                role="bodyLarge"
-                className="text-center text-m3-on-surface">
-                Your next watch starts here
-              </AppText>
-              <AppText
-                role="bodyMedium"
-                className="mt-1 text-center text-m3-on-surface-variant">
-                Search by title, then browse every provider in one place
-              </AppText>
-            </AnimatedContainer>
+
+              {activeTab === 'recent' ? (
+                searchHistory.length > 0 ? (
+                  <View style={{flex: 1}}>
+                    <SearchHistory
+                      history={searchHistory}
+                      onSelectSearch={handleSearch}
+                      onRemoveSearch={removeHistoryItem}
+                      onClearHistory={clearHistory}
+                      searchFieldNodeHandle={searchFieldNode}
+                      onFirstItemNodeHandle={setFirstItemNode}
+                    />
+                  </View>
+                ) : (
+                  <View
+                    style={{
+                      flex: 1,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingHorizontal: 32,
+                    }}>
+                    <MaterialCommunityIcons
+                      name="history"
+                      size={48}
+                      color={colors.onSurfaceVariant}
+                      style={{opacity: 0.5, marginBottom: 12}}
+                    />
+                    <AppText
+                      role="titleMedium"
+                      style={{color: colors.onSurface, textAlign: 'center'}}>
+                      No recent searches
+                    </AppText>
+                    <AppText
+                      role="bodyMedium"
+                      style={{
+                        color: colors.onSurfaceVariant,
+                        textAlign: 'center',
+                        marginTop: 4,
+                        marginBottom: 16,
+                      }}>
+                      Use search above or explore genres and filters
+                    </AppText>
+                    <Button
+                      variant="tonal"
+                      compact
+                      onPress={() => setActiveTab('advanced')}>
+                      Open Advanced Search
+                    </Button>
+                  </View>
+                )
+              ) : (
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32}}>
+                  <AppText
+                    role="titleLargeEmphasized"
+                    className="text-m3-on-surface mb-2">
+                    Filter by Genre, Year & Country
+                  </AppText>
+                  <AppText
+                    role="bodyMedium"
+                    style={{color: colors.onSurfaceVariant, marginBottom: 16}}>
+                    Find movies and shows by selecting custom parameters
+                  </AppText>
+
+                  <View className="flex-row gap-x-3 mb-4">
+                    <View className="flex-1">
+                      <DropdownField
+                        options={[
+                          { id: '', name: 'Any Genre' },
+                          { id: '28', name: 'Action' },
+                          { id: '12', name: 'Adventure' },
+                          { id: '16', name: 'Animation' },
+                          { id: '35', name: 'Comedy' },
+                          { id: '80', name: 'Crime' },
+                          { id: '99', name: 'Documentary' },
+                          { id: '18', name: 'Drama' },
+                          { id: '10751', name: 'Family' },
+                          { id: '14', name: 'Fantasy' },
+                          { id: '36', name: 'History' },
+                          { id: '27', name: 'Horror' },
+                          { id: '10402', name: 'Music' },
+                          { id: '9648', name: 'Mystery' },
+                          { id: '10749', name: 'Romance' },
+                          { id: '878', name: 'Science Fiction' },
+                          { id: '10770', name: 'TV Movie' },
+                          { id: '53', name: 'Thriller' },
+                          { id: '10752', name: 'War' },
+                          { id: '37', name: 'Western' },
+                        ]}
+                        value={{ id: selectedGenre, name: '' }}
+                        getKey={(o) => o.id}
+                        getLabel={(o) => o.id === '' ? 'Any Genre' : o.name}
+                        onChange={(o) => setSelectedGenre(o.id)}
+                        placeholder="Genre"
+                      />
+                    </View>
+                    <View className="flex-1">
+                      <DropdownField
+                        options={[
+                          { id: '', name: 'Any Year' },
+                          ...Array.from({length: 50}, (_, i) => {
+                            const y = new Date().getFullYear() - i;
+                            return { id: String(y), name: String(y) };
+                          })
+                        ]}
+                        value={{ id: selectedYear, name: '' }}
+                        getKey={(o) => o.id}
+                        getLabel={(o) => o.id === '' ? 'Any Year' : o.name}
+                        onChange={(o) => setSelectedYear(o.id)}
+                        placeholder="Year"
+                      />
+                    </View>
+                    <View className="flex-1">
+                      <DropdownField
+                        options={[
+                          { id: '', name: 'Any Country' },
+                          { id: 'US', name: 'United States' },
+                          { id: 'GB', name: 'United Kingdom' },
+                          { id: 'JP', name: 'Japan' },
+                          { id: 'KR', name: 'South Korea' },
+                          { id: 'IN', name: 'India' },
+                          { id: 'FR', name: 'France' },
+                          { id: 'DE', name: 'Germany' },
+                          { id: 'IT', name: 'Italy' },
+                          { id: 'ES', name: 'Spain' },
+                          { id: 'CA', name: 'Canada' },
+                          { id: 'AU', name: 'Australia' },
+                          { id: 'CN', name: 'China' },
+                        ]}
+                        value={{ id: selectedCountry, name: '' }}
+                        getKey={(o) => o.id}
+                        getLabel={(o) => o.id === '' ? 'Any Country' : o.name}
+                        onChange={(o) => setSelectedCountry(o.id)}
+                        placeholder="Country"
+                      />
+                    </View>
+                  </View>
+
+                  <Button
+                    onPress={() => {
+                      navigation.navigate('Explore', {
+                        initialGenre: selectedGenre,
+                        initialYear: selectedYear,
+                        initialCountry: selectedCountry
+                      });
+                    }}
+                    disabled={!selectedGenre && !selectedYear && !selectedCountry}
+                    style={{width: "100%", marginTop: 8}}>
+                    Explore Filters
+                  </Button>
+                </ScrollView>
+              )}
+            </View>
           )}
         </View>
       </View>

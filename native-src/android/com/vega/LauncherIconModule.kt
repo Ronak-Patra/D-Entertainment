@@ -31,6 +31,20 @@ class LauncherIconModule(reactContext: ReactApplicationContext) : ReactContextBa
             "lavender" to "LauncherLavender",
         )
         private val ALL_ALIASES = ALIASES.values + DEFAULT_ALIAS
+
+        @JvmStatic
+        var instance: LauncherIconModule? = null
+
+        @JvmStatic
+        fun emitPipChange(isInPip: Boolean) {
+            try {
+                instance?.reactApplicationContext
+                    ?.getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                    ?.emit("onSystemPipChanged", isInPip)
+            } catch (e: Exception) {
+                // Ignore if bridge not initialized
+            }
+        }
     }
 
     private val isTv: Boolean
@@ -42,10 +56,47 @@ class LauncherIconModule(reactContext: ReactApplicationContext) : ReactContextBa
     private var pendingTvIcon: String? = null
 
     init {
+        instance = this
         reactContext.addLifecycleEventListener(this)
     }
 
     override fun getName(): String = "LauncherIconModule"
+
+    @ReactMethod
+    fun setPipPlaybackActive(active: Boolean) {
+        MainActivity.isVideoPlaying = active
+        com.facebook.react.bridge.UiThreadUtil.runOnUiThread {
+            MainActivity.currentMainActivity?.updatePipParams(active)
+        }
+    }
+
+    @ReactMethod
+    fun enterGlobalPip(promise: Promise) {
+        com.facebook.react.bridge.UiThreadUtil.runOnUiThread {
+            val activity = reactApplicationContext.currentActivity ?: MainActivity.currentMainActivity
+            if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (activity.isInPictureInPictureMode) {
+                    promise.resolve(true)
+                    return@runOnUiThread
+                }
+                MainActivity.isVideoPlaying = true
+                try {
+                    val builder = android.app.PictureInPictureParams.Builder()
+                        .setAspectRatio(android.util.Rational(16, 9))
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        builder.setAutoEnterEnabled(true)
+                        builder.setSeamlessResizeEnabled(true)
+                    }
+                    val entered = activity.enterPictureInPictureMode(builder.build())
+                    promise.resolve(entered)
+                } catch (e: Exception) {
+                    promise.reject("PIP_ERROR", e.message)
+                }
+            } else {
+                promise.resolve(false)
+            }
+        }
+    }
 
     @Synchronized
     @ReactMethod

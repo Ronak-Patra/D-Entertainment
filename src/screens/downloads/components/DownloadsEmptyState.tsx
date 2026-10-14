@@ -11,6 +11,7 @@ import {useM3Colors} from '../../../theme/M3PaletteContext';
 
 interface DownloadsEmptyStateProps {
   onExplore: () => void;
+  onPlayLocalVideo?: () => void;
   exploreButtonRef?: React.RefObject<any>;
   onExploreLayout?: () => void;
   preferredFocus?: boolean;
@@ -18,6 +19,7 @@ interface DownloadsEmptyStateProps {
 
 export const DownloadsEmptyState: React.FC<DownloadsEmptyStateProps> = ({
   onExplore,
+  onPlayLocalVideo,
   exploreButtonRef,
   onExploreLayout,
   preferredFocus = true,
@@ -37,7 +39,38 @@ export const DownloadsEmptyState: React.FC<DownloadsEmptyStateProps> = ({
         className="mt-4 text-center text-m3-on-surface-variant">
         Your downloaded library is empty
       </AppText>
-      <View className="mt-6">
+      <View className="mt-6 flex-row flex-wrap items-center justify-center gap-3">
+        {onPlayLocalVideo ? (
+          <TVFocusable
+            accessibilityRole="button"
+            accessibilityLabel="Play Local Video"
+            onPress={onPlayLocalVideo}
+            borderRadius={20}
+            focusScale={1.06}
+            focusBorderColor={focusBorderColor}
+            style={{
+              alignItems: 'center',
+              backgroundColor: colors.surfaceContainerHigh,
+              borderRadius: 20,
+              flexDirection: 'row',
+              gap: 8,
+              justifyContent: 'center',
+              minHeight: 44,
+              paddingHorizontal: 18,
+              paddingVertical: 10,
+            }}>
+            <MaterialCommunityIcons
+              name="folder-play-outline"
+              size={20}
+              color={colors.primary}
+            />
+            <AppText
+              role="labelLargeEmphasized"
+              style={{color: colors.primary, fontWeight: '700'}}>
+              Play Local Video
+            </AppText>
+          </TVFocusable>
+        ) : null}
         <TVFocusable
           ref={exploreButtonRef}
           onLayout={onExploreLayout}

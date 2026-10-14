@@ -4,7 +4,7 @@ import {scheduleWhenIdle} from '../performance/idleWork';
 import {throwIfProviderAborted} from '../sandbox/abort';
 import {QueryClient, useQuery, useQueryClient} from '@tanstack/react-query';
 import {getHomePageData, HomePageData} from '../getHomepagedata';
-import {Content} from '../zustand/contentStore';
+import useContentStore, {Content} from '../zustand/contentStore';
 import {cacheStorage} from '../storage';
 import {deduplicatePosts} from '../providers/deduplicatePosts';
 import type {Post} from '../providers/types';
@@ -36,6 +36,13 @@ export const useHomePageData = ({
   const catalogOptions = {
     queryKey: ['homeCatalog', ...scope],
     queryFn: async ({signal}: {signal: AbortSignal}) => {
+      if (provider.value === 'all') {
+        const { CUSTOM_HUBS } = await import('../getHomepagedata');
+        return CUSTOM_HUBS.map(hub => ({
+          title: hub.title,
+          filter: hub.title,
+        }));
+      }
       const {providerManager} = await import('../services/ProviderManager');
       return providerManager.getCatalog({
         providerValue: provider.value,
@@ -53,9 +60,19 @@ export const useHomePageData = ({
     queryKey,
     select: normalizeHomePosts,
     queryFn: async ({signal}) => {
+      const { extensionStorage, providersStorage } = await import('../storage');
+      let installedProviders = useContentStore.getState().installedProviders;
+      if (!installedProviders || installedProviders.length === 0) {
+        installedProviders = extensionStorage.getInstalledProviders();
+      }
+      const disabledProviders = providersStorage.getDisabledProviders();
+      const activeProviders = (installedProviders || []).filter(
+        p => !disabledProviders.includes(p.value) && p.value !== 'all',
+      );
       const catalogs = await queryClient.fetchQuery(catalogOptions);
       return getHomePageData(provider, signal, {
         catalogs,
+        installedProviders: activeProviders,
         previousData: queryClient.getQueryData<HomePageData[]>(queryKey),
         onCategory: data => {
           // Cancellation retains manual cache writes. Keep partial results

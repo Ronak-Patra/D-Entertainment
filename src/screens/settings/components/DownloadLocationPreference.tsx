@@ -81,7 +81,7 @@ const DownloadLocationPreference = ({
         />
         <SettingsRow
           title="Reset download location"
-          description={isTV ? 'Use Vega app storage' : 'Choose a folder again on the next download'}
+          description={isTV ? 'Use D Entertainment app storage' : 'Choose a folder again on the next download'}
           divider={false}
           icon="restore"
           onPress={() => {

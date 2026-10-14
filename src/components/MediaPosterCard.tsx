@@ -148,7 +148,7 @@ const MediaPosterCardBase = React.forwardRef<View, MediaPosterCardProps>(
 
     const lastPressTime = React.useRef<number>(0);
     const handlePress = React.useCallback(() => {
-      if (!isCurrentlyFocusable || navigation?.isFocused() === false) return;
+      if (isTV && (!isCurrentlyFocusable || navigation?.isFocused() === false)) return;
       const now = Date.now();
       if (now - lastPressTime.current < 300) return;
       lastPressTime.current = now;
@@ -159,7 +159,8 @@ const MediaPosterCardBase = React.forwardRef<View, MediaPosterCardProps>(
     // listener. Run once, or selection toggles on and straight back off.
     const lastLongPressTime = React.useRef<number>(0);
     const handleLongPress = React.useCallback(() => {
-      if (!onLongPress || !isCurrentlyFocusable || navigation?.isFocused() === false) return;
+      if (!onLongPress) return;
+      if (isTV && (!isCurrentlyFocusable || navigation?.isFocused() === false)) return;
       const now = Date.now();
       if (now - lastLongPressTime.current < 800) return;
       lastLongPressTime.current = now;
@@ -209,9 +210,9 @@ const MediaPosterCardBase = React.forwardRef<View, MediaPosterCardProps>(
             setIsFocused(false);
             forgetFocus();
           }}
-          onPress={isCurrentlyFocusable ? handlePress : undefined}
+          onPress={!isTV || isCurrentlyFocusable ? handlePress : undefined}
           onLongPress={
-            isCurrentlyFocusable && onLongPress ? handleLongPress : undefined
+            (!isTV || isCurrentlyFocusable) && onLongPress ? handleLongPress : undefined
           }
           delayLongPress={350}
           style={({pressed, focused}: any) => {
@@ -369,11 +370,15 @@ const MediaPosterCardBase = React.forwardRef<View, MediaPosterCardProps>(
                         justifyContent: 'center',
                         width: selected ? width - 8 : width,
                       }}>
-                      <AppText
-                        role="headlineMediumEmphasized"
-                        style={{color: colors.onSurfaceVariant}}>
-                        {title.slice(0, 1).toUpperCase()}
-                      </AppText>
+                      <Image
+                        source={require('../../assets/icon.png')}
+                        resizeMode="contain"
+                        style={{
+                          width: '60%',
+                          height: '60%',
+                          opacity: 0.8,
+                        }}
+                      />
                     </View>
                   )}
                   {activeFocused ? (

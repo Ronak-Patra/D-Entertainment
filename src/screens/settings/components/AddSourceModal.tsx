@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import Text from '../../../components/ui/Text';
 import {TVFocusable} from '../../../components/tv';
-import {socialLinks} from '../../../lib/constants';
 import {useM3Colors} from '../../../theme/M3PaletteContext';
 import {readableOnColor} from '../../../theme/seeds';
 import {useTVFocusBorderColor} from '../../../lib/tv/useTVFocusBorderColor';
@@ -215,24 +214,7 @@ export const AddSourceModal: React.FC<AddSourceModalProps> = ({
           <Text
             className="text-sm mt-[4px]"
             style={{color: colors.onSurfaceVariant, lineHeight: 20}}>
-            How to create provider{' '}
-            <Text
-              accessibilityRole="link"
-              style={{color: '#38BDF8', fontSize: 14, lineHeight: 20}}
-              onPress={() => Linking.openURL(socialLinks.github + '#vega-app')}>
-              here
-            </Text>
-          </Text>
-          <Text
-            className="text-sm mt-[4px]"
-            style={{color: colors.onSurfaceVariant, lineHeight: 20}}>
-            or join Discord for support{' '}
-            <Text
-              accessibilityRole="link"
-              style={{color: '#38BDF8', fontSize: 14, lineHeight: 20}}
-              onPress={() => Linking.openURL(socialLinks.discord)}>
-              Discord
-            </Text>
+            Provide a git repository URL containing extension modules or an extension manifest JSON.
           </Text>
           <TextInput
             className="h-14 px-4 mt-4"

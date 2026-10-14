@@ -54,6 +54,7 @@ const SliderPosterItem = memo(
         aspectRatio={item.aspectRatio}
         borderRadius={item.borderRadius}
         cornerTag={item.cornerTag || item.tag}
+        badge={item.rating ? `⭐ ${item.rating}` : undefined}
         onPress={handlePress}
       />
     );
@@ -148,6 +149,7 @@ const Slider = ({
         link: item.link,
         provider: item.provider || providerValue || fallbackProviderValue,
         poster: item?.image,
+        title: item.title,
       });
     },
     [navigation, providerValue, fallbackProviderValue],
@@ -270,7 +272,7 @@ const Slider = ({
           scrollEventThrottle={100}
           showsHorizontalScrollIndicator={false}
           data={uniquePosts}
-          extraData={isSelected}
+          extraData={[isSelected, uniquePosts, scrollKey]}
           horizontal
           style={{overflow: 'visible'}}
           contentContainerStyle={{

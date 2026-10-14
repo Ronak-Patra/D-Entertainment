@@ -1,6 +1,7 @@
 package com.vega
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -333,6 +334,114 @@ class HttpDownloadModule(
             } catch (error: Exception) {
                 File(outputPath).delete()
                 promise.reject("MUX_FAILED", error.message ?: error.toString(), error)
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    /**
+     * Finalizes downloaded HLS playlists (video and optional separate audio)
+     * into a single MP4 container using FFmpeg and returns its duration in seconds.
+     */
+    @ReactMethod
+    fun finalizeHls(
+        videoPlaylistPath: String,
+        audioPlaylistPath: String?,
+        outputPath: String,
+        promise: Promise
+    ) {
+        Thread {
+            val outputFile = File(outputPath)
+            try {
+                if (outputFile.exists()) outputFile.delete()
+
+                val args = mutableListOf(
+                    "-hide_banner", "-loglevel", "error", "-y",
+                    "-allowed_extensions", "ALL",
+                    "-i", videoPlaylistPath
+                )
+                if (!audioPlaylistPath.isNullOrBlank() && File(audioPlaylistPath).exists()) {
+                    args.addAll(listOf(
+                        "-allowed_extensions", "ALL",
+                        "-i", audioPlaylistPath,
+                        "-map", "0:v:0", "-map", "1:a:0"
+                    ))
+                } else {
+                    args.addAll(listOf(
+                        "-map", "0:v:0", "-map", "0:a?"
+                    ))
+                }
+                args.addAll(listOf(
+                    "-c", "copy",
+                    "-f", "mp4",
+                    "-movflags", "+faststart",
+                    outputPath
+                ))
+
+                var session = FFmpegKit.executeWithArguments(args.toTypedArray())
+                if (!ReturnCode.isSuccess(session.returnCode) || !outputFile.exists() || outputFile.length() == 0L) {
+                    if (outputFile.exists()) outputFile.delete()
+                    val fallbackArgs = mutableListOf(
+                        "-hide_banner", "-loglevel", "error", "-y",
+                        "-allowed_extensions", "ALL",
+                        "-i", videoPlaylistPath
+                    )
+                    if (!audioPlaylistPath.isNullOrBlank() && File(audioPlaylistPath).exists()) {
+                        fallbackArgs.addAll(listOf(
+                            "-allowed_extensions", "ALL",
+                            "-i", audioPlaylistPath,
+                            "-map", "0:v:0", "-map", "1:a:0"
+                        ))
+                    } else {
+                        fallbackArgs.addAll(listOf(
+                            "-map", "0:v:0", "-map", "0:a?"
+                        ))
+                    }
+                    fallbackArgs.addAll(listOf(
+                        "-c:v", "copy",
+                        "-c:a", "aac",
+                        "-f", "mp4",
+                        "-movflags", "+faststart",
+                        outputPath
+                    ))
+                    session = FFmpegKit.executeWithArguments(fallbackArgs.toTypedArray())
+                }
+
+                if (ReturnCode.isSuccess(session.returnCode) && outputFile.exists() && outputFile.length() > 0L) {
+                    var durationSec = 0.0
+                    try {
+                        val retriever = MediaMetadataRetriever()
+                        retriever.setDataSource(outputPath)
+                        val durStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                        retriever.release()
+                        durationSec = (durStr?.toDoubleOrNull() ?: 0.0) / 1000.0
+                    } catch (_: Exception) {}
+
+                    if (durationSec <= 0.0) {
+                        try {
+                            val playlistContent = File(videoPlaylistPath).readText()
+                            val regex = Regex("""#EXTINF:([0-9.]+),""")
+                            val matches = regex.findAll(playlistContent)
+                            var sum = 0.0
+                            for (m in matches) {
+                                sum += m.groupValues[1].toDoubleOrNull() ?: 0.0
+                            }
+                            if (sum > 0.0) durationSec = sum
+                        } catch (_: Exception) {}
+                    }
+
+                    if (durationSec <= 0.0) durationSec = 1.0
+
+                    val result = Arguments.createMap()
+                    result.putDouble("duration", durationSec)
+                    promise.resolve(result)
+                } else {
+                    val log = session.allLogsAsString?.takeLast(400)?.trim().orEmpty()
+                    if (outputFile.exists()) outputFile.delete()
+                    promise.reject("FINALIZE_FAILED", "Failed to finalize HLS into MP4: $log")
+                }
+            } catch (error: Exception) {
+                if (outputFile.exists()) outputFile.delete()
+                promise.reject("FINALIZE_FAILED", error.message ?: error.toString(), error)
             }
         }.apply { isDaemon = true }.start()
     }

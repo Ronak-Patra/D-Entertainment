@@ -140,6 +140,11 @@ export interface VideoPlayerProps extends ReactVideoProps {
   onPlay?: () => void;
 
   /**
+   * Fired when the playback state changes between playing and paused
+   */
+  onPausedChange?: (paused: boolean) => void;
+
+  /**
    * Hide controls after X amount of time in milliseconds
    *
    * @default 15000

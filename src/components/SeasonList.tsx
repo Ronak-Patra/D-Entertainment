@@ -1,3 +1,4 @@
+import {useInAppPlayerStore} from '../lib/zustand/inAppPlayerStore';
 import React, {
   useState,
   useMemo,
@@ -948,7 +949,8 @@ const SeasonListContent: React.FC<SeasonListProps> = ({
         return;
       }
 
-      navigation.navigate('Player', {
+      useInAppPlayerStore.getState().openPlayer( {
+        link,
         linkIndex,
         episodeList: episodeData,
         type: playbackType,

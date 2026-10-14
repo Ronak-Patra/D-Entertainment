@@ -47,6 +47,7 @@ export enum SettingsKeys {
 
   // Provider list order picked in the provider drawer
   PROVIDER_ORDER = 'providerOrder',
+  DISABLE_DRAWER = 'disableDrawer',
 
   // Download settings
   DOWNLOAD_LOCATION = 'downloadLocation',
@@ -183,7 +184,7 @@ export class SettingsStorage {
 
   // Theme settings
   getPrimaryColor(): string {
-    return mainStorage.getString(SettingsKeys.PRIMARY_COLOR) || '#FFFFFF';
+    return mainStorage.getString(SettingsKeys.PRIMARY_COLOR) || '#00E5FF';
   }
 
   setPrimaryColor(color: string): void {
@@ -309,6 +310,14 @@ export class SettingsStorage {
 
   setShowMediaControls(show: boolean): void {
     mainStorage.setBool(SettingsKeys.SHOW_MEDIA_CONTROLS, show);
+  }
+
+  isDisableDrawer(): boolean {
+    return mainStorage.getBool(SettingsKeys.DISABLE_DRAWER, false);
+  }
+
+  setDisableDrawer(disabled: boolean): void {
+    mainStorage.setBool(SettingsKeys.DISABLE_DRAWER, disabled);
   }
 
   showHamburgerMenu(): boolean {
@@ -491,7 +500,7 @@ export class SettingsStorage {
   }
 
   getParallelStreaming(): boolean {
-    return mainStorage.getBool(SettingsKeys.PARALLEL_STREAMING, false);
+    return mainStorage.getBool(SettingsKeys.PARALLEL_STREAMING, true);
   }
 
   setParallelStreaming(enabled: boolean): void {

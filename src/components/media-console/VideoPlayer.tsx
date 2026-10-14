@@ -72,6 +72,7 @@ const AnimatedVideoPlayer = (
     onShowControls = () => {},
     onPause,
     onPlay,
+    onPausedChange,
     onLoad,
     onLoadStart,
     onProgress,
@@ -221,8 +222,12 @@ const AnimatedVideoPlayer = (
     [],
   );
   const togglePlayPause = useCallback(() => {
-    setPaused((prevState) => !prevState);
-  }, []);
+    setPaused((prevState) => {
+      const next = !prevState;
+      onPausedChange?.(next);
+      return next;
+    });
+  }, [onPausedChange]);
 
   const styles = useMemo(
     () => ({
@@ -543,7 +548,9 @@ const AnimatedVideoPlayer = (
   }, [isFullscreen]);
 
   useEffect(() => {
-    setPaused(paused);
+    if (typeof paused === 'boolean') {
+      setPaused(paused);
+    }
   }, [paused]);
 
   useEffect(() => {
@@ -970,6 +977,7 @@ const AnimatedVideoPlayer = (
             style={[_styles.player.video, styles.videoStyle]}
             source={source}
             onBuffer={onBuffer}
+            playWhenInactive={true}
             // SurfaceView is rendered in a separate Android surface and does
             // not follow React Native transforms. Pinch zoom therefore needs
             // TextureView, which remains part of the normal view hierarchy.

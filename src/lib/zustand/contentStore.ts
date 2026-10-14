@@ -4,6 +4,7 @@ import {MMKVLoader} from 'react-native-mmkv-storage';
 // import {ProvidersList, providersList} from '../constants';
 import {extensionStorage, ProviderExtension} from '../storage/extensionStorage';
 import {settingsStorage} from '../storage/SettingsStorage';
+import {providersStorage} from '../storage/ProvidersStorage';
 import {sortInstalledProviders} from '../providerOrder';
 
 const storage = new MMKVLoader().initialize();
@@ -18,6 +19,7 @@ export interface Content {
   setAvailableProviders: (providers: ProviderExtension[]) => void;
   activeExtensionProvider: ProviderExtension | null;
   setActiveExtensionProvider: (provider: ProviderExtension | null) => void;
+  ensureValidProviderSelected: () => void;
 }
 
 const useContentStore = create<Content>()(
@@ -36,7 +38,9 @@ const useContentStore = create<Content>()(
         lastUpdated: 0,
       },
       installedProviders: sortInstalledProviders(
-        extensionStorage.getInstalledProviders(),
+        extensionStorage
+          .getInstalledProviders()
+          .filter(p => !providersStorage.getDisabledProviders().includes(p.value)),
         settingsStorage.getProviderOrder(),
       ),
       availableProviders: [],
@@ -45,19 +49,41 @@ const useContentStore = create<Content>()(
       setProvider: (provider: ProviderExtension) => set({provider}),
 
       // Kept in the order the user dragged them to in the provider drawer.
-      setInstalledProviders: (providers: ProviderExtension[]) =>
-        set({
-          installedProviders: sortInstalledProviders(
-            providers,
-            settingsStorage.getProviderOrder(),
-          ),
-        }),
+      setInstalledProviders: (providers: ProviderExtension[]) => {
+        const sorted = sortInstalledProviders(
+          providers,
+          settingsStorage.getProviderOrder(),
+        );
+        set(state => {
+          let currentProvider = state.provider;
+          if (!currentProvider?.value || currentProvider.value === '') {
+            if (sorted.length > 0) {
+              currentProvider = sorted[0];
+            }
+          }
+          return {
+            installedProviders: sorted,
+            provider: currentProvider,
+          };
+        });
+      },
 
       setAvailableProviders: (providers: ProviderExtension[]) =>
         set({availableProviders: providers}),
 
       setActiveExtensionProvider: (provider: ProviderExtension | null) =>
         set({activeExtensionProvider: provider}),
+
+      ensureValidProviderSelected: () => {
+        set(state => {
+          if (!state.provider?.value || state.provider.value === '') {
+            if (state.installedProviders.length > 0) {
+              return {provider: state.installedProviders[0]};
+            }
+          }
+          return {};
+        });
+      },
     }),
     {
       name: 'content-storage',

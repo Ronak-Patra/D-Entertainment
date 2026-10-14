@@ -9,15 +9,17 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import './global.css';
 import Home from './screens/home/Home';
 import Info from './screens/home/Info';
-import Player from './screens/home/Player';
+import GlobalPlayerWrapper from './components/GlobalPlayerWrapper';
 import Settings from './screens/settings/Settings';
 import Library from './screens/Library';
 import Search from './screens/Search';
+import Explore from './screens/Explore';
 import {isTV} from './lib/tv';
 import ScrollList from './screens/ScrollList';
 import {
   NavigationContainer,
   createNavigationContainerRef,
+  type NavigatorScreenParams,
 } from '@react-navigation/native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
@@ -26,8 +28,7 @@ import 'react-native-reanimated';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import WebView from './screens/WebView';
 import SearchResults from './screens/SearchResults';
-// import DisableProviders from './screens/settings/DisableProviders';
-import About, {checkForUpdate} from './screens/settings/About';
+import About from './screens/settings/About';
 import BootSplash from 'react-native-bootsplash';
 import {SystemBars} from 'react-native-edge-to-edge';
 import {enableFreeze, enableScreens} from 'react-native-screens';
@@ -76,6 +77,7 @@ import {
   syncFromSharedFolder,
 } from './lib/sync/syncService';
 import StreamingTabBar from './components/navigation/StreamingTabBar';
+import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import AppDialogHost from './components/AppDialogHost';
 import {RemoteVolumeToast} from './components/remote-player/RemoteVolumeToast';
 import {
@@ -89,7 +91,7 @@ enableFreeze(true);
 
 export type HomeStackParamList = {
   Home: undefined;
-  Info: {link: string; provider?: string; poster?: string};
+  Info: {link: string; provider?: string; poster?: string; title?: string};
   ScrollList: {
     filter: string;
     title?: string;
@@ -110,46 +112,29 @@ export type RootStackParamList = {
         };
       }
     | undefined;
-  Player: {
-    linkIndex: number;
-    episodeList: EpisodeLink[];
-    directUrl?: string;
-    type: string;
-    primaryTitle?: string;
-    secondaryTitle?: string;
-    poster: {
-      logo?: string;
-      poster?: string;
-      background?: string;
-    };
-    file?: string;
-    providerValue?: string;
-    infoUrl?: string;
-    alwaysCast?: boolean;
-  };
 };
 
 export type SearchStackParamList = {
-  Search: undefined;
+  Search: {resetKey?: number} | undefined;
+  Explore: { personId?: string; personName?: string; initialGenre?: string; initialYear?: string; initialCountry?: string; };
   ScrollList: {
     filter: string;
     title?: string;
     providerValue?: string;
     isSearch: boolean;
   };
-  Info: {link: string; provider?: string; poster?: string};
+  Info: {link: string; provider?: string; poster?: string; title?: string};
   SearchResults: {filter: string; availableProviders?: string[]};
 };
 
 export type WatchListStackParamList = {
   WatchList: undefined;
-  Info: {link: string; provider?: string; poster?: string};
+  Info: {link: string; provider?: string; poster?: string; title?: string};
 };
 
 export type SettingsStackParamList = {
   Settings: undefined;
   Appearance: undefined;
-  DisableProviders: undefined;
   About: undefined;
   Preferences: undefined;
   SubTitlesPreferences: undefined;
@@ -163,11 +148,11 @@ export type DownloadsStackParamList = {
 };
 
 export type TabStackParamList = {
-  HomeStack: undefined;
-  SearchStack: undefined;
-  WatchListStack: undefined;
-  DownloadsStack: undefined;
-  SettingsStack: undefined;
+  HomeStack: NavigatorScreenParams<HomeStackParamList> | undefined;
+  SearchStack: NavigatorScreenParams<SearchStackParamList> | undefined;
+  WatchListStack: NavigatorScreenParams<WatchListStackParamList> | undefined;
+  DownloadsStack: NavigatorScreenParams<DownloadsStackParamList> | undefined;
+  SettingsStack: NavigatorScreenParams<SettingsStackParamList> | undefined;
 };
 const Tab = createBottomTabNavigator<TabStackParamList>();
 // Navigators and their screen components live at module scope. Created inside
@@ -353,6 +338,7 @@ function SearchStackScreen() {
       screenListeners={navigationWorkListeners}
       screenOptions={stackScreenOptions}>
       <SearchStack.Screen name="Search" component={Search} />
+      <SearchStack.Screen name="Explore" component={Explore} />
       <SearchStack.Screen name="ScrollList" component={ScrollList} />
       <SearchStack.Screen name="Info" component={Info} />
       <SearchStack.Screen name="SearchResults" component={SearchResults} />
@@ -403,10 +389,6 @@ function SettingsStackScreen() {
         component={Appearance}
         options={subpageOptions}
       />
-      {/* <SettingsStack.Screen
-        name="DisableProviders"
-        component={DisableProviders}
-      /> */}
       <SettingsStack.Screen
         name="About"
         component={About}
@@ -469,6 +451,21 @@ function TabStack() {
         name="SearchStack"
         component={SearchStackScreen}
         options={searchTabOptions}
+        listeners={({navigation}) => ({
+          tabPress: e => {
+            e.preventDefault();
+            if (settingsStorage.isHapticFeedbackEnabled()) {
+              ReactNativeHapticFeedback.trigger('effectTick', {
+                enableVibrateFallback: true,
+                ignoreAndroidSystemSettings: false,
+              });
+            }
+            navigation.navigate('SearchStack', {
+              screen: 'Search',
+              params: {resetKey: Date.now()},
+            });
+          },
+        })}
       />
       <Tab.Screen
         name="WatchListStack"
@@ -653,12 +650,6 @@ const App = () => {
     );
   }, []);
 
-  useEffect(() => {
-    const isPlayStore = Constants.expoConfig?.extra?.isPlayStore;
-    if (!isPlayStore && settingsStorage.isAutoCheckUpdateEnabled()) {
-      checkForUpdate(() => {}, settingsStorage.isAutoDownloadEnabled(), false);
-    }
-  }, []);
 
   useEffect(() => subscribeSourceIntent(openAddSourceScreen), []);
 
@@ -701,12 +692,8 @@ const App = () => {
                   screenListeners={navigationWorkListeners}
                   screenOptions={rootStackScreenOptions}>
                   <Stack.Screen name="TabStack" component={TabStack} />
-                  <Stack.Screen
-                    name="Player"
-                    component={Player}
-                    options={playerScreenOptions}
-                  />
                 </Stack.Navigator>
+                <GlobalPlayerWrapper />
               </NavigationContainer>
               {/* Global WAF / captcha solving dialog, triggered by providers via
                 providerContext.openWebView */}

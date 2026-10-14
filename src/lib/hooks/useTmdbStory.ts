@@ -2,6 +2,7 @@ import axios from 'axios';
 import Constants from 'expo-constants';
 import {useQuery} from '@tanstack/react-query';
 import {settingsStorage} from '../storage';
+import { getTmdbApiKey as getRotatedTmdbApiKey } from '../services/apiKeys';
 
 export type TmdbMediaType = 'movie' | 'tv';
 
@@ -102,6 +103,8 @@ interface UseTmdbStoryOptions {
   imdbId?: string;
   tmdbId?: number | string;
   type?: string;
+  title?: string;
+  year?: string | number;
 }
 
 interface TmdbFindResult {
@@ -118,7 +121,7 @@ export const getProxyApiUrl = (): string =>
   ).trim();
 
 export const getTmdbApiKey = (): string =>
-  settingsStorage.getTmdbApiKey() ||
+  getRotatedTmdbApiKey() ||
   String(Constants.expoConfig?.extra?.tmdbApiKey || '').trim();
 
 const getPreferredMediaType = (type?: string): TmdbMediaType =>
@@ -395,51 +398,154 @@ const resolveTmdbIdentity = async ({
   preferredType,
   signal,
   tmdbId,
+  title,
+  year,
 }: {
   apiKey: string;
   imdbId?: string;
   preferredType: TmdbMediaType;
   signal?: AbortSignal;
   tmdbId?: number | string;
+  title?: string;
+  year?: string | number;
 }): Promise<{id: number; mediaType: TmdbMediaType}> => {
   const directId = Number(tmdbId);
   if (Number.isFinite(directId) && directId > 0) {
     return {id: directId, mediaType: preferredType};
   }
 
-  if (!imdbId) {
-    throw new Error('No TMDB or IMDb identifier is available');
+  if (imdbId) {
+    const response = await axios.get(`${TMDB_API_URL}/find/${imdbId}`, {
+      params: {
+        api_key: apiKey,
+        external_source: 'imdb_id',
+        language: 'en-US',
+      },
+      signal,
+      timeout: 10000,
+    });
+    const preferredResults: TmdbFindResult[] =
+      preferredType === 'tv'
+        ? (response.data?.tv_results ?? [])
+        : (response.data?.movie_results ?? []);
+    const fallbackResults: TmdbFindResult[] =
+      preferredType === 'tv'
+        ? (response.data?.movie_results ?? [])
+        : (response.data?.tv_results ?? []);
+    const result = preferredResults[0] ?? fallbackResults[0];
+    if (result?.id) {
+      return {
+        id: result.id,
+        mediaType: preferredResults[0]
+          ? preferredType
+          : preferredType === 'tv'
+            ? 'movie'
+            : 'tv',
+      };
+    }
   }
 
-  const response = await axios.get(`${TMDB_API_URL}/find/${imdbId}`, {
-    params: {
-      api_key: apiKey,
-      external_source: 'imdb_id',
-      language: 'en-US',
-    },
-    signal,
-    timeout: 10000,
-  });
-  const preferredResults: TmdbFindResult[] =
-    preferredType === 'tv'
-      ? (response.data?.tv_results ?? [])
-      : (response.data?.movie_results ?? []);
-  const fallbackResults: TmdbFindResult[] =
-    preferredType === 'tv'
-      ? (response.data?.movie_results ?? [])
-      : (response.data?.tv_results ?? []);
-  const result = preferredResults[0] ?? fallbackResults[0];
-  if (!result?.id) {
-    throw new Error('TMDB could not match this IMDb identifier');
+  if (title) {
+    const cleanTitle = title
+      .replace(/\b(1080p|720p|480p|2160p|4k|hdr|web-dl|bluray|x264|x265|hevc|h264|aac|dual audio|hindi dubbed|hindi|english|tamil|telugu|kannada|malayalam|bengali|org|multi|rip|complete|all episodes|uncut|hdrip|webrip)\b/gi, '')
+      .replace(/\[.*?\]|\(.*?\)/g, '')
+      .replace(/\b(season\s*\d+|s\d+|episode\s*\d+|ep\s*\d+)\b/gi, '')
+      .replace(/[-_.:]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    let searchYear = year;
+    if (!searchYear) {
+      const yearMatch = title.match(/\b(19\d{2}|20\d{2})\b/);
+      if (yearMatch) searchYear = yearMatch[1];
+    }
+
+    const queriesToTry = Array.from(new Set([
+      cleanTitle.length > 1 ? cleanTitle : title,
+      cleanTitle.split(/\s+/).slice(0, 4).join(' '),
+      title.split(/[:-]/)[0].trim(),
+    ])).filter(q => q && q.length > 1);
+
+    for (const query of queriesToTry) {
+      const endpoint = preferredType === 'tv' ? 'search/tv' : 'search/movie';
+      const params: any = {
+        api_key: apiKey,
+        query,
+        language: 'en-US',
+        page: 1,
+      };
+      if (searchYear) {
+        if (preferredType === 'tv') params.first_air_date_year = searchYear;
+        else params.primary_release_year = searchYear;
+      }
+
+      let response = await axios.get(`${TMDB_API_URL}/${endpoint}`, {
+        params,
+        signal,
+        timeout: 10000,
+      }).catch(() => null);
+
+      let results = response?.data?.results ?? [];
+      if (results.length === 0 && searchYear) {
+        // Retry without year constraint
+        delete params.first_air_date_year;
+        delete params.primary_release_year;
+        response = await axios.get(`${TMDB_API_URL}/${endpoint}`, {
+          params,
+          signal,
+          timeout: 10000,
+        }).catch(() => null);
+        results = response?.data?.results ?? [];
+      }
+
+      if (results.length === 0) {
+        // Try search/multi
+        response = await axios.get(`${TMDB_API_URL}/search/multi`, {
+          params: {api_key: apiKey, query, language: 'en-US', page: 1},
+          signal,
+          timeout: 10000,
+        }).catch(() => null);
+        results = (response?.data?.results ?? []).filter(
+          (r: any) => r.media_type === 'movie' || r.media_type === 'tv',
+        );
+        if (results.length > 0) {
+          return {id: results[0].id, mediaType: results[0].media_type as TmdbMediaType};
+        }
+      }
+
+      if (results.length > 0) {
+        return {id: results[0].id, mediaType: preferredType};
+      }
+    }
+
+    // Try OMDB title search fallback to get IMDb ID
+    try {
+      const omdbKey = (await import('../services/apiKeys')).getOmdbApiKey();
+      if (omdbKey && cleanTitle) {
+        const omdbRes = await axios.get('https://www.omdbapi.com/', {
+          params: {apikey: omdbKey, t: cleanTitle},
+          signal,
+          timeout: 8000,
+        }).catch(() => null);
+        const imdbFromOmdb = omdbRes?.data?.imdbID;
+        if (imdbFromOmdb) {
+          const tmdbFindRes = await axios.get(`${TMDB_API_URL}/find/${imdbFromOmdb}`, {
+            params: {api_key: apiKey, external_source: 'imdb_id', language: 'en-US'},
+            signal,
+            timeout: 8000,
+          }).catch(() => null);
+          const findResults = (preferredType === 'tv' ? tmdbFindRes?.data?.tv_results : tmdbFindRes?.data?.movie_results) || tmdbFindRes?.data?.movie_results || tmdbFindRes?.data?.tv_results;
+          if (findResults && findResults[0]?.id) {
+            return {id: findResults[0].id, mediaType: preferredType};
+          }
+        }
+      }
+    } catch {
+      // Ignore OMDB fallback errors
+    }
   }
-  return {
-    id: result.id,
-    mediaType: preferredResults[0]
-      ? preferredType
-      : preferredType === 'tv'
-        ? 'movie'
-        : 'tv',
-  };
+
+  throw new Error('No TMDB or IMDb identifier is available and search failed');
 };
 
 const normalizeStoryData = ({
@@ -572,6 +678,8 @@ const fetchTmdbStory = async ({
   signal,
   tmdbId,
   type,
+  title,
+  year,
 }: Omit<UseTmdbStoryOptions, 'enabled'> & {
   signal?: AbortSignal;
 }): Promise<TmdbStoryData> => {
@@ -586,6 +694,8 @@ const fetchTmdbStory = async ({
     preferredType: getPreferredMediaType(type),
     signal,
     tmdbId,
+    title,
+    year,
   });
   const appendToResponse =
     identity.mediaType === 'tv'
@@ -663,12 +773,8 @@ export const fetchStoryData = async (
   }
 
   // Fallback to TMDB if proxy is not configured in env or if proxy failed / no imdbId
-  const envKey = String(Constants.expoConfig?.extra?.tmdbApiKey || '').trim();
-  if (envKey || userTmdbKey) {
-    return fetchTmdbStory(options);
-  }
-
-  throw new Error('Could not fetch metadata. No proxy available and no TMDB API key configured.');
+  // This will use userTmdbKey, envKey, or the hardcoded fallback keys from apiKeys.ts
+  return fetchTmdbStory(options);
 };
 
 export const useTmdbStory = ({
@@ -676,6 +782,8 @@ export const useTmdbStory = ({
   imdbId,
   tmdbId,
   type,
+  title,
+  year,
 }: UseTmdbStoryOptions) => {
   const apiKeyRevision = settingsStorage.getTmdbApiKeyRevision();
 
@@ -685,10 +793,13 @@ export const useTmdbStory = ({
       tmdbId || '',
       imdbId || '',
       type || '',
+      title || '',
+      year || '',
       apiKeyRevision,
     ],
-    queryFn: ({signal}) => fetchStoryData({imdbId, signal, tmdbId, type}),
-    enabled: enabled && Boolean(tmdbId || imdbId),
+    queryFn: ({signal}) =>
+      fetchStoryData({imdbId, signal, tmdbId, type, title, year}),
+    enabled: enabled && Boolean(tmdbId || imdbId || title),
     staleTime: 24 * 60 * 60 * 1000,
     gcTime: 48 * 60 * 60 * 1000,
     retry: 1,

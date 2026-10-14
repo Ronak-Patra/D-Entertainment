@@ -59,7 +59,19 @@ export default function Info({route, navigation}: Props): React.JSX.Element {
   const onlyCollectionId = useWatchListStore(state =>
     state.collections.length === 1 ? state.collections[0].id : undefined,
   );
-  const providerValue = route.params.provider || provider.value;
+  const rawProviderValue = route.params.provider || provider.value;
+  const providerValue = useMemo(() => {
+    if (rawProviderValue && rawProviderValue !== 'all') {
+      return rawProviderValue;
+    }
+    const link = route.params?.link || '';
+    const match = installedProviders.find(
+      p => !p.disabled && p.value !== 'all' && link.toLowerCase().includes(p.value.toLowerCase()),
+    );
+    if (match) return match.value;
+    const firstActive = installedProviders.find(p => !p.disabled && p.value !== 'all');
+    return firstActive?.value || 'vega';
+  }, [rawProviderValue, installedProviders, route.params?.link]);
   const {
     info,
     meta,
@@ -136,22 +148,23 @@ export default function Info({route, navigation}: Props): React.JSX.Element {
     [installedProviders, providerValue],
   );
 
-  const displayTitle = meta?.name || info?.title;
+  const displayTitle = meta?.name || info?.title || route.params.title;
   const displayLogo = meta?.logo || info?.logo;
   const synopsis =
-    meta?.description || info?.synopsis || 'No synopsis available';
+    meta?.description || info?.synopsis || (isLoading && !info ? 'Loading details...' : 'No synopsis available');
   const posterImage =
     info?.poster ||
     meta?.poster ||
     route.params.poster ||
     info?.image ||
-    'https://placehold.jp/24/363636/ffffff/500x750.png?text=Vega';
+    'https://placehold.jp/24/363636/ffffff/500x750.png?text=D+Entertainment';
   const accentBackground =
     meta?.background || info?.image || route.params.poster;
   const backgroundImage =
     meta?.background ||
     info?.image ||
-    'https://placehold.jp/24/363636/ffffff/900x1200.png?text=Vega';
+    route.params.poster ||
+    'https://placehold.jp/24/363636/ffffff/900x1200.png?text=D+Entertainment';
   // Posters and small images are blurred behind the page, with the sharp
   // poster shown in the header instead of stretched across it.
   const {ready: backdropReady, posterLike: backdropPosterLike} =
@@ -340,8 +353,7 @@ export default function Info({route, navigation}: Props): React.JSX.Element {
     );
   }
 
-  const isContentLoading =
-    !info || (dynamicInfoAccentEnabled && !initialAccentReady);
+  const isContentLoading = !info && !displayTitle;
   if (isContentLoading) {
     return (
       <View style={{backgroundColor: '#000000', flex: 1}}>
@@ -393,13 +405,13 @@ export default function Info({route, navigation}: Props): React.JSX.Element {
                   headerPoster={backdropPosterLike ? backgroundImage : undefined}
                   genres={meta?.genres}
                   inLibrary={inLibrary}
-                  isLoading={isLoading && !info}
+                  isLoading={isLoading && !info && !displayTitle}
                   logo={displayLogo}
                   onBack={navigation.goBack}
                   backButtonRef={backButtonRef}
                   onBackButtonLayout={registerBackFocus}
                   onOpenStory={
-                    info?.tmdbId || info?.imdbId
+                    info?.tmdbId || info?.imdbId || displayTitle || (route.params as any)?.title
                       ? () => setStoryVisible(true)
                       : undefined
                   }
@@ -477,12 +489,17 @@ export default function Info({route, navigation}: Props): React.JSX.Element {
           <InfoStoryModal
             fallbackBackdrop={backgroundImage}
             fallbackOverview={synopsis}
-            fallbackTitle={displayTitle}
-            imdbId={info?.imdbId}
+            fallbackTitle={displayTitle || (route.params as any)?.title}
+            fallbackYear={meta?.year || (info as any)?.year || (route.params as any)?.year}
+            imdbId={info?.imdbId || (meta as any)?.imdbId}
             onClose={closeStory}
-            tmdbId={info?.tmdbId}
-            type={info?.type}
+            tmdbId={info?.tmdbId || (meta as any)?.tmdbId}
+            type={info?.type || (route.params as any)?.type}
             visible={storyVisible}
+            onPersonPress={(id, name) => {
+              closeStory();
+              navigation.navigate('SearchStack' as any, { screen: 'Explore', params: { personId: String(id), personName: name }});
+            }}
           />
           <LibraryCollectionDialog
             visible={collectionPickerVisible}

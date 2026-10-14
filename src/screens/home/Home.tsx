@@ -5,7 +5,7 @@ import {
   beginUIInteraction,
   endUIInteraction,
 } from '../../lib/performance/idleWork';
-import {RefreshControl, View, Modal, Pressable} from 'react-native';
+import {RefreshControl, View, Modal, Pressable, ScrollView} from 'react-native';
 import {FlashList} from '@shopify/flash-list';
 import Slider from '../../components/Slider';
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
@@ -60,6 +60,18 @@ const homeRowType = (row: HomeRow) =>
 // ready so fast D-pad presses do not run past the rendered content.
 const HOME_DRAW_DISTANCE = isTV ? 800 : 250;
 
+export const CATEGORY_TABS = [
+  'All',
+  'Anime',
+  'K-Drama',
+  'Trending & New',
+  'Bollywood & South Indian',
+  'Hollywood',
+  'OTT Series',
+] as const;
+
+export type CategoryTab = typeof CATEGORY_TABS[number];
+
 const Home = ({}: Props) => {
   const colors = useM3Colors();
   const isFocused = useIsFocused();
@@ -70,14 +82,14 @@ const Home = ({}: Props) => {
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [isAtTop, setIsAtTop] = useState(true);
   const [heroVisible, setHeroVisible] = useState(true);
+  const [activeCategory, setActiveCategory] = useState<CategoryTab>('All');
+  const [mediaTypeFilter, setMediaTypeFilter] = useState<'All' | 'Movies' | 'Web-Series'>('All');
   const showContinueWatching = useNavigationPreferencesStore(
     state => state.showContinueWatching,
   );
 
-  // Memoize static values
-  const disableDrawer = useMemo(
-    () => mainStorage.getBool('disableDrawer') || false,
-    [],
+  const disableDrawer = useNavigationPreferencesStore(
+    state => state.disableDrawer,
   );
 
   const provider = useContentStore(state => state.provider);
@@ -100,6 +112,13 @@ const Home = ({}: Props) => {
   }, []);
   const installedProviders = useContentStore(state => state.installedProviders);
   const setHeroes = useHeroStore(state => state.setHeroes);
+
+  // Auto-select provider when providers are installed but none selected
+  useEffect(() => {
+    if (installedProviders && installedProviders.length > 0 && (!provider?.value || provider.value === '')) {
+      useContentStore.getState().setProvider(installedProviders[0]);
+    }
+  }, [installedProviders, provider?.value]);
 
   // React Query for home page data with better error handling
   const {
@@ -221,6 +240,152 @@ const Home = ({}: Props) => {
   const staged = useStagedHomeRows(rows, JSON.stringify([
     provider.source?.author, provider.source?.url, provider.value, provider.version,
   ]), !isTV, isFocused);
+  // Derive the active filtered and sorted rows based on activeCategory & mediaTypeFilter
+  const displayRows = useMemo(() => {
+    const isSeriesPost = (post: any, row?: any): boolean => {
+      const title = (post.title || '').toLowerCase();
+      const link = (post.link || '').toLowerCase();
+      const cornerTag = (post.cornerTag || '').toLowerCase();
+      const tag = (post.tag || '').toLowerCase();
+      const combinedMeta = `${cornerTag} ${tag}`;
+      const rowTitle = (row?.title || '').toLowerCase();
+
+      // Explicit Episode indicators in cornerTag or tag (e.g., "EP 16", "Ep.1", "16/16", "Ongoing", "12 Eps", "Episode 5")
+      if (
+        /\b(ep|eps|episode|episodes)[\s.:-]*\d+/i.test(combinedMeta) ||
+        /\b\d+\s*(?:eps?|episodes)\b/i.test(combinedMeta) ||
+        /\b\d+\s*\/\s*\d+\b/i.test(combinedMeta) ||
+        /\b(s\d+|s\d+\s*e\d+|e\d+|season|seasons|ongoing|completed)\b/i.test(combinedMeta) ||
+        /\b(k-drama|kdrama|c-drama|cdrama|j-drama|jdrama|asian drama|drama|web series|tv series|series)\b/i.test(tag)
+      ) {
+        return true;
+      }
+
+      // Title markers for series/episodes/dramas
+      if (
+        /\b(s\d+|season|episode|ep\s*\d+|eps\s*\d+|e\d+|series|k-drama|kdrama|c-drama|cdrama|asian drama|anime|drama|batch|all episodes|complete series)\b/i.test(title)
+      ) {
+        return true;
+      }
+
+      // Link markers for drama/series URLs
+      if (
+        /\/series\/|\/show\/|\/tv\/|\/tv-show|\/web-series|\/season\/|\/drama-detail\/|\/drama\/|\/kshow\/|\/asian-drama\/|\/anime\//i.test(link) ||
+        /-episode-|\/episode\/|\/ep-\d+|\/ep\d+/i.test(link)
+      ) {
+        return true;
+      }
+
+      // If the row itself is a drama/series row and the post does NOT explicitly say it is a standalone movie/film
+      if (
+        /k-drama|kdrama|asian drama|web series|ott series|tv series|tv shows/i.test(rowTitle) &&
+        !/\b(movie|film)\b/i.test(`${title} ${combinedMeta}`)
+      ) {
+        return true;
+      }
+
+      return false;
+    };
+
+
+    const matchesCategory = (row: any, cat: CategoryTab): boolean => {
+      if (cat === 'All') return true;
+      const title = (row.title || '').toLowerCase();
+      const filter = (row.filter || '').toLowerCase();
+
+      switch (cat) {
+        case 'Anime':
+          return /anime|donghua|manga|animation/i.test(title) || /anime/i.test(filter);
+        case 'K-Drama':
+          return /k-drama|kdrama|korean|asian drama|c-drama|cdrama/i.test(title) || /kdrama|k-drama|korean/i.test(filter);
+        case 'Trending & New':
+          return /trending|popular|top|hot|featured|new|latest|recent|release/i.test(title) || /trending|latest|new/i.test(filter);
+        case 'Bollywood & South Indian':
+          return (
+            /bollywood|hindi|desi|indian|south|telugu|tamil|malayalam|kannada|tollywood|kollywood/i.test(
+              title,
+            ) || /bollywood|hindi|south|telugu|tamil/i.test(filter)
+          );
+        case 'Hollywood':
+          return /hollywood|english|international|western/i.test(title) || /hollywood|english/i.test(filter);
+        case 'OTT Series':
+          return /netflix|prime|hotstar|jiocinema|zee5|hulu|apple|ott|web series/i.test(title) || /ott|series/i.test(filter);
+        default:
+          return true;
+      }
+    };
+
+    // Filter rows by category tab
+    let candidateRows = staged.rows.filter((row: any) => matchesCategory(row, activeCategory));
+
+    // Fallback: If single provider without matching catalog titles, filter posts inside rows
+    if (candidateRows.length === 0 && activeCategory !== 'All') {
+      const getCategoryRegex = (cat: CategoryTab): RegExp | null => {
+        switch (cat) {
+          case 'Anime': return /anime|donghua|animation/i;
+          case 'K-Drama': return /k-drama|kdrama|korean|c-drama|cdrama/i;
+          case 'Bollywood & South Indian': return /bollywood|hindi|south|telugu|tamil|malayalam|kannada|tollywood|kollywood|desi|indian/i;
+          case 'Hollywood': return /hollywood|english/i;
+          case 'OTT Series': return /netflix|prime|hotstar|jiocinema|zee5|apple/i;
+          default: return null;
+        }
+      };
+      const catRegex = getCategoryRegex(activeCategory);
+      if (catRegex) {
+        candidateRows = staged.rows
+          .map((row: any) => ({
+            ...row,
+            posts: (row.posts || []).filter((p: any) =>
+              catRegex.test(p.title || '') || catRegex.test(p.tag || '') || catRegex.test(p.cornerTag || '')
+            ),
+          }))
+          .filter((row: any) => row.posts.length > 0);
+      }
+    }
+
+    if (candidateRows.length === 0 && activeCategory === 'All') {
+      candidateRows = staged.rows;
+    }
+
+    return candidateRows
+      .filter((row: any) => (row.posts && row.posts.length > 0) || row.isLoading)
+      .map((row: any) => {
+        if (!row.posts || row.posts.length === 0) {
+          return {
+            ...row,
+            key: `${row.key}_${activeCategory}_${mediaTypeFilter}`,
+          };
+        }
+
+        let filteredPosts = [...row.posts];
+
+        if (activeCategory === 'Hollywood' || (row.title && row.title.toLowerCase().includes('hollywood'))) {
+          filteredPosts = filteredPosts.filter(p => {
+            const t = (p.title || '').toLowerCase();
+            const tag = (p.tag || '').toLowerCase();
+            if (/bollywood|punjabi|bengali|marathi|gujarati|bhojpuri|desi|tollywood|kollywood/i.test(t)) return false;
+            if (/bollywood|punjabi|bengali|marathi|gujarati|bhojpuri|desi/i.test(tag)) return false;
+            if (/hindi movie|hindi original|hindi web/i.test(t) && !/hollywood|english|dubbed|dual audio/i.test(t)) return false;
+            return true;
+          });
+        }
+
+        // Filter by mediaTypeFilter (Movies vs Web-Series)
+        if (mediaTypeFilter === 'Movies') {
+          filteredPosts = filteredPosts.filter(p => !isSeriesPost(p, row));
+        } else if (mediaTypeFilter === 'Web-Series') {
+          filteredPosts = filteredPosts.filter(p => isSeriesPost(p, row));
+        }
+
+        return {
+          ...row,
+          key: `${row.key}_${activeCategory}_${mediaTypeFilter}`,
+          posts: filteredPosts,
+        };
+      })
+      .filter((row: any) => (row.posts && row.posts.length > 0) || row.isLoading);
+  }, [staged.rows, activeCategory, mediaTypeFilter]);
+
   const providerValue = provider?.value;
   const renderRow = useCallback(
     ({item}: {item: HomeRow}) => (
@@ -273,12 +438,8 @@ const Home = ({}: Props) => {
     );
   }, [error, isLoading, homeData.length]);
 
-  // Early return for no providers
-  if (
-    !installedProviders ||
-    installedProviders.length === 0 ||
-    !provider?.value
-  ) {
+  // Early return only when truly no providers are installed
+  if (!installedProviders || installedProviders.length === 0) {
     return <Tutorial />;
   }
 
@@ -313,7 +474,8 @@ const Home = ({}: Props) => {
             <StatusBar style="light" />
 
             <FlashList
-              data={staged.rows}
+              data={displayRows}
+              extraData={`${activeCategory}_${mediaTypeFilter}`}
               onViewableItemsChanged={staged.onViewableItemsChanged}
               renderItem={renderRow}
               keyExtractor={homeRowKey}
@@ -329,6 +491,18 @@ const Home = ({}: Props) => {
               showsVerticalScrollIndicator={false}
               style={{backgroundColor: colors.background}}
               contentContainerStyle={{paddingBottom: isTV ? 120 : 32}}
+              ListEmptyComponent={
+                !isLoading ? (
+                  <View style={{paddingVertical: 48, alignItems: 'center', justifyContent: 'center'}}>
+                    <AppText role="titleMediumEmphasized" style={{color: colors.onSurfaceVariant}}>
+                      No content found for "{activeCategory}"
+                    </AppText>
+                    <AppText role="bodySmall" style={{color: colors.outline, marginTop: 4}}>
+                      Try selecting "All" or switching media filters.
+                    </AppText>
+                  </View>
+                ) : null
+              }
               refreshControl={
                 <RefreshControl
                   colors={[colors.primary]}
@@ -346,6 +520,88 @@ const Home = ({}: Props) => {
                     isVisible={heroVisible}
                     onOpenDrawer={openDrawer}
                   />
+                  {/* Dual Filter Header: Smart Category Tabs + Media Type */}
+                  <View style={{paddingTop: 16, paddingBottom: 6}}>
+                    {/* Filter Row 1: Smart Category Tabs */}
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{
+                        flexDirection: 'row',
+                        paddingHorizontal: 20,
+                        paddingBottom: 8,
+                        gap: 8,
+                      }}>
+                      {CATEGORY_TABS.map(cat => (
+                        <Pressable
+                          key={`cat-${cat}`}
+                          onPress={() => setActiveCategory(cat)}
+                          style={{
+                            paddingHorizontal: 16,
+                            paddingVertical: 7,
+                            borderRadius: 20,
+                            backgroundColor:
+                              activeCategory === cat
+                                ? colors.primary
+                                : colors.surfaceContainerHigh,
+                          }}>
+                          <AppText
+                            role="labelLargeEmphasized"
+                            style={{
+                              color:
+                                activeCategory === cat
+                                  ? colors.onPrimary
+                                  : colors.onSurface,
+                            }}>
+                            {cat}
+                          </AppText>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+
+                    {/* Filter Row 2: Media Type (All / Movies / Web-Series) */}
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{
+                        flexDirection: 'row',
+                        paddingHorizontal: 20,
+                        paddingTop: 2,
+                        paddingBottom: 6,
+                        gap: 8,
+                      }}>
+                      {(['All', 'Movies', 'Web-Series'] as const).map(type => (
+                        <Pressable
+                          key={`type-${type}`}
+                          onPress={() => setMediaTypeFilter(type)}
+                          style={{
+                            paddingHorizontal: 16,
+                            paddingVertical: 7,
+                            borderRadius: 20,
+                            borderWidth: 1,
+                            borderColor:
+                              mediaTypeFilter === type
+                                ? colors.secondary
+                                : 'transparent',
+                            backgroundColor:
+                              mediaTypeFilter === type
+                                ? colors.secondaryContainer
+                                : colors.surfaceContainerLow,
+                          }}>
+                          <AppText
+                            role="labelLargeEmphasized"
+                            style={{
+                              color:
+                                mediaTypeFilter === type
+                                  ? colors.onSecondaryContainer
+                                  : colors.onSurfaceVariant,
+                            }}>
+                            {type === 'Web-Series' ? 'Web Series' : type}
+                          </AppText>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
                   {showContinueWatching && <ContinueWatching />}
                 </>
               }

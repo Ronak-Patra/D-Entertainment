@@ -1,6 +1,6 @@
 import type {OMDBResult, OMDBResponse} from '../../types/omdb';
+import { getOmdbApiKey } from './apiKeys';
 
-const OMDB_API_KEY = '7755307f';
 const BASE_URL = 'https://www.omdbapi.com';
 
 export const searchOMDB = async (query: string): Promise<OMDBResult[]> => {
@@ -10,7 +10,7 @@ export const searchOMDB = async (query: string): Promise<OMDBResult[]> => {
 
   try {
     const response = await fetch(
-      `${BASE_URL}/?apikey=${OMDB_API_KEY}&s=${encodeURIComponent(query)}`,
+      `${BASE_URL}/?apikey=${getOmdbApiKey()}&s=${encodeURIComponent(query)}`,
     );
     const data: OMDBResponse = await response.json();
     return data.Response === 'True' ? data.Search : [];

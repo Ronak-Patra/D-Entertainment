@@ -6,6 +6,10 @@ interface NavigationPreferencesState {
   setHideDownloadsTab: (hide: boolean) => void;
   showContinueWatching: boolean;
   setShowContinueWatching: (show: boolean) => void;
+  disableDrawer: boolean;
+  setDisableDrawer: (disabled: boolean) => void;
+  showHamburgerMenu: boolean;
+  setShowHamburgerMenu: (show: boolean) => void;
 }
 
 const useNavigationPreferencesStore = create<NavigationPreferencesState>(
@@ -19,6 +23,16 @@ const useNavigationPreferencesStore = create<NavigationPreferencesState>(
     setShowContinueWatching: show => {
       settingsStorage.setShowContinueWatching(show);
       set({showContinueWatching: show});
+    },
+    disableDrawer: settingsStorage.isDisableDrawer(),
+    setDisableDrawer: disabled => {
+      settingsStorage.setDisableDrawer(disabled);
+      set({disableDrawer: disabled});
+    },
+    showHamburgerMenu: settingsStorage.showHamburgerMenu(),
+    setShowHamburgerMenu: show => {
+      settingsStorage.setShowHamburgerMenu(show);
+      set({showHamburgerMenu: show});
     },
   }),
 );

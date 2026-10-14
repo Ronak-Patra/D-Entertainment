@@ -125,7 +125,6 @@ import {
 } from '@react-navigation/native';
 import RenderProviderFlagIcon from '../../components/RenderProviderFLagIcon';
 import useNavigationPreferencesStore from '../../lib/zustand/navigationPreferencesStore';
-import GitHubStarButton from './components/GitHubStarButton';
 import DnsPreference from './components/DnsPreference';
 import SettingsRow from '../../components/ui/SettingsRow';
 import SettingsSection from '../../components/ui/SettingsSection';
@@ -260,7 +259,7 @@ const Settings = ({navigation}: Props) => {
       showAppDialog({
         title: 'Restore backup?',
         message:
-          'This replaces your settings and installed providers with the ones in the backup. Vega will restart after restoring.',
+          'This replaces your settings and installed providers with the ones in the backup. D Entertainment will restart after restoring.',
         actions: [
           {label: 'Cancel'},
           {
@@ -288,7 +287,7 @@ const Settings = ({navigation}: Props) => {
     showAppDialog({
       title: 'Erase all local data?',
       message:
-        'This permanently erases every Vega MMKV store, including settings, installed provider data, Library, Continue watching, download records, and cached state. This cannot be undone. Downloaded media files on disk are not deleted.',
+        'This permanently erases every D Entertainment MMKV store, including settings, installed provider data, Library, Continue watching, download records, and cached state. This cannot be undone. Downloaded media files on disk are not deleted.',
       variant: 'error',
       actions: [
         {label: 'Cancel'},
@@ -464,15 +463,14 @@ const Settings = ({navigation}: Props) => {
               </SettingsSection>
             </AnimatedSection>
 
-            {/* About & GitHub section */}
+            {/* About section */}
             <AnimatedSection delay={400}>
               <SettingsSection title="About">
                 <SettingsRow
-                  title="About Vega"
+                  title="About D Entertainment"
                   icon="information-outline"
                   onPress={() => navigation.navigate('About')}
                 />
-                <GitHubStarButton primary={colors.primary} />
               </SettingsSection>
             </AnimatedSection>
           </View>

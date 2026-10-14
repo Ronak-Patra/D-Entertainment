@@ -19,9 +19,7 @@ module.exports = function withAndroidReleaseGradle(config) {
       // Write helper gradle to add the APK rename logic if not present
       const helperContent = `// Auto-applied by with-android-release-gradle config plugin
 if (project.android) {
-  // One APK for phone and TV: no variant in the name, so the in-app updater
-  // picks the same file on both.
-  def baseAppName = "vega"
+  def baseAppName = "d-entertainment"
   project.ext { appName = baseAppName }
 
   project.android.applicationVariants.all { variant ->
@@ -37,18 +35,16 @@ if (project.android) {
 `;
       fs.writeFileSync(helperGradle, helperContent, 'utf8');
 
-      // Write ABI splits gradle which disables splits and ensures universal ARM build
+      // Write ABI splits gradle for separate armeabi-v7a and arm64-v8a release APKs
       const abiSplitsContent = `// Auto-applied by with-android-release-gradle config plugin
 if (project.android) {
   project.android {
     splits {
       abi {
-        enable false
-      }
-    }
-    defaultConfig {
-      ndk {
-        abiFilters 'armeabi-v7a', 'arm64-v8a'
+        enable true
+        reset()
+        include 'armeabi-v7a', 'arm64-v8a'
+        universalApk false
       }
     }
     packagingOptions {

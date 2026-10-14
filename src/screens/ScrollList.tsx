@@ -57,6 +57,10 @@ const ScrollListCard = memo(({
   const colors = useM3Colors();
   const focusBorderColor = useTVFocusBorderColor();
   const [isFocused, setIsFocused] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  useEffect(() => {
+    setImageError(false);
+  }, [item.image]);
   const pressableRef = useRef<View>(null);
   const isNavFocused = useSafeIsNavFocused();
   const {
@@ -143,19 +147,37 @@ const ScrollListCard = memo(({
           borderWidth: isTV ? 3 : 1,
           borderColor: isFocused ? focusBorderColor : 'rgba(255, 255, 255, 0.08)',
         }}>
-        <Image
-          source={{
-            uri:
-              item.image ||
-              'https://placehold.jp/24/363636/ffffff/100x150.png?text=Vega',
-          }}
-          resizeMode="cover"
-          resizeMethod="resize"
-          style={{
-            width: '100%',
-            height: '100%',
-          }}
-        />
+        {item.image && !imageError ? (
+          <Image
+            source={{uri: item.image}}
+            onError={() => setImageError(true)}
+            resizeMode="cover"
+            resizeMethod="resize"
+            style={{
+              width: '100%',
+              height: '100%',
+            }}
+          />
+        ) : (
+          <View
+            style={{
+              width: '100%',
+              height: '100%',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: colors.surfaceContainerHighest,
+            }}>
+            <Image
+              source={require('../../assets/icon.png')}
+              resizeMode="contain"
+              style={{
+                width: '50%',
+                height: '50%',
+                opacity: 0.8,
+              }}
+            />
+          </View>
+        )}
         {activeTag.length > 0 ? (
           <View
             style={{
@@ -283,19 +305,184 @@ const ScrollList = ({ route }: Props): React.ReactElement => {
 
       // Promise chain instead of try/catch/finally: React Compiler skips any
       // component with a finally clause or conditionals inside a try block.
-      const getNewPosts = isSearch
-        ? providerManager.getSearchPosts({
-            searchQuery: filter,
-            page,
-            providerValue: activeProviderValue,
-            signal,
-          })
-        : providerManager.getPosts({
-            filter,
-            page,
-            providerValue: activeProviderValue,
-            signal,
+      let getNewPosts: Promise<Post[]>;
+      const fetchWithTimeout = <T,>(
+        promise: Promise<T>,
+        timeoutMs: number,
+        fallback: T,
+      ): Promise<T> => {
+        return Promise.race([
+          promise,
+          new Promise<T>(resolve => setTimeout(() => resolve(fallback), timeoutMs)),
+        ]);
+      };
+
+      if (activeProviderValue === 'all') {
+        const { CUSTOM_HUBS, getRecencyScore, extractYearFromTitle } = await import('../lib/getHomepagedata');
+        const { extensionStorage, providersStorage } = await import('../lib/storage');
+        const { deduplicatePosts } = await import('../lib/providers/deduplicatePosts');
+        const installed = extensionStorage.getInstalledProviders();
+        const disabled = providersStorage.getDisabledProviders();
+        let activeProviders = installed.filter(
+          p => !disabled.includes(p.value) && p.value !== 'all',
+        );
+        if (activeProviders.length === 0) {
+          const storeProviders = useContentStore.getState().installedProviders;
+          activeProviders = storeProviders.filter(
+            p => !disabled.includes(p.value) && p.value !== 'all',
+          );
+        }
+
+        if (isSearch) {
+          const searchTargets = activeProviders.slice(0, 6);
+          const promises = searchTargets.map(p =>
+            fetchWithTimeout(
+              providerManager
+                .getSearchPosts({
+                  searchQuery: filter,
+                  page,
+                  providerValue: p.value,
+                  signal,
+                })
+                .then(res => (res || []).map(item => ({ ...item, provider: p.value })))
+                .catch(() => [] as Post[]),
+              6500,
+              [] as Post[],
+            ),
+          );
+          getNewPosts = Promise.all(promises).then(lists =>
+            deduplicatePosts(lists.flat()),
+          );
+        } else {
+          const hub = CUSTOM_HUBS.find(
+            h =>
+              h.title.toLowerCase() === filter.toLowerCase() ||
+              h.title.toLowerCase() === (route.params.title || '').toLowerCase(),
+          );
+          const keywords = hub?.keywords || [filter.toLowerCase()];
+          const isLatest = hub?.title === 'Latest Releases' || hub?.title === 'New Releases';
+
+          // Rank and select top matching providers for this hub
+          let targetProviders = activeProviders;
+          if (!isLatest && hub) {
+            const scored = activeProviders.map(p => {
+              let score = 0;
+              const type = (p.type || '').toLowerCase();
+              const val = (p.value || '').toLowerCase();
+              const name = (p.display_name || '').toLowerCase();
+              if (hub.title === 'Anime' && (type === 'anime' || val.includes('anime'))) score += 50;
+              if (hub.title.includes('K-Drama') && (type === 'drama' || val.includes('drama'))) score += 50;
+              if ((hub.title.includes('Bollywood') || hub.title.includes('South')) && (type === 'india' || val.includes('bolly') || val.includes('hindi') || val.includes('south'))) score += 50;
+              if (hub.title.includes('Hollywood')) {
+                if (type === 'english' || type === 'global') score += 70;
+                if (type === 'india') score -= 30;
+                if (val.includes('holly') || name.includes('holly') || val.includes('english')) score += 40;
+                if (val.includes('bolly') || val.includes('desi') || name.includes('bolly')) score -= 40;
+              }
+              for (const kw of keywords) {
+                if (val.includes(kw) || name.includes(kw)) score += 20;
+              }
+              return { provider: p, score };
+            });
+            scored.sort((a, b) => b.score - a.score);
+            targetProviders = scored.slice(0, 4).map(s => s.provider);
+          } else {
+            targetProviders = activeProviders.slice(0, 5);
+          }
+
+          const promises = targetProviders.map(async p => {
+            try {
+              const catalogs = await fetchWithTimeout(
+                providerManager.getCatalog({ providerValue: p.value, signal }),
+                4500,
+                [],
+              );
+              let matched = catalogs.find(f =>
+                keywords.some(
+                  k =>
+                    (f.title && f.title.toLowerCase().includes(k)) ||
+                    (f.filter && f.filter.toLowerCase().includes(k)),
+                ),
+              );
+              if (!matched) {
+                if (isLatest) matched = catalogs[0];
+                else if (hub?.title === 'Trending') matched = catalogs[1] || catalogs[0];
+                else if (
+                  hub?.title.includes('Hollywood') ||
+                  hub?.title === 'Anime' ||
+                  hub?.title.includes('K-Drama')
+                ) {
+                  matched = undefined;
+                } else {
+                  matched = catalogs[0];
+                }
+              }
+              if (matched) {
+                const res = await fetchWithTimeout(
+                  providerManager.getPosts({
+                    filter: matched.filter,
+                    page,
+                    providerValue: p.value,
+                    signal,
+                  }),
+                  6500,
+                  [],
+                );
+                let mapped = (res || []).map(item => ({ ...item, provider: p.value }));
+                if (hub?.title.includes('Hollywood')) {
+                  mapped = mapped.filter(item => {
+                    const t = (item.title || '').toLowerCase();
+                    const tag = (item.tag || '').toLowerCase();
+                    if (/bollywood|punjabi|bengali|marathi|gujarati|bhojpuri|desi|tollywood|kollywood/i.test(t)) return false;
+                    if (/bollywood|punjabi|bengali|marathi|gujarati|bhojpuri|desi/i.test(tag)) return false;
+                    if (/hindi movie|hindi original|hindi web/i.test(t) && !/hollywood|english|dubbed|dual audio/i.test(t)) return false;
+                    return true;
+                  });
+                }
+                return mapped;
+              }
+            } catch {}
+            return [] as Post[];
           });
+
+          getNewPosts = Promise.all(promises).then(lists => {
+            const unique = deduplicatePosts(lists.flat());
+            if (isLatest) {
+              unique.sort((a, b) => getRecencyScore(b) - getRecencyScore(a));
+            } else if (hub?.title === 'Trending') {
+              unique.sort((a, b) => {
+                const rA = parseFloat(String(a.rating || 0)) || 0;
+                const rB = parseFloat(String(b.rating || 0)) || 0;
+                if (rA !== rB) return rB - rA;
+                return extractYearFromTitle(b.title) - extractYearFromTitle(a.title);
+              });
+            }
+            return unique;
+          });
+        }
+      } else {
+        getNewPosts = isSearch
+          ? fetchWithTimeout(
+              providerManager.getSearchPosts({
+                searchQuery: filter,
+                page,
+                providerValue: activeProviderValue,
+                signal,
+              }),
+              10000,
+              [] as Post[],
+            )
+          : fetchWithTimeout(
+              providerManager.getPosts({
+                filter,
+                page,
+                providerValue: activeProviderValue,
+                signal,
+              }),
+              10000,
+              [] as Post[],
+            );
+      }
 
       await getNewPosts
         .then(newPosts => {
@@ -437,8 +624,9 @@ const ScrollList = ({ route }: Props): React.ReactElement => {
                 onPress={() =>
                   navigation.navigate('Info', {
                     link: item.link,
-                    provider: route.params.providerValue || provider.value,
+                    provider: (item as any)?.provider || (route.params.providerValue !== 'all' ? route.params.providerValue : undefined) || (provider.value !== 'all' ? provider.value : undefined),
                     poster: item?.image,
+                    title: item.title,
                   })
                 }
               />

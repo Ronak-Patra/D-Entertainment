@@ -117,6 +117,7 @@ export class ProviderManager {
     exportName?: string,
     args: Record<string, unknown> = {},
     signal?: AbortSignal,
+    priority?: 'high' | 'normal',
   ): Promise<T> {
     return sandboxBridge.invoke<T>({
       moduleCode: module.code,
@@ -130,6 +131,7 @@ export class ProviderManager {
         providerScopeId(module.author, providerValue),
       ),
       signal,
+      priority,
     });
   }
 
@@ -307,6 +309,7 @@ export class ProviderManager {
         'getMeta',
         {link, provider},
         signal,
+        'high',
       );
     } catch (error) {
       if (signal?.aborted) {
@@ -349,6 +352,7 @@ export class ProviderManager {
         'getStream',
         {link, type, isDownload: Boolean(isDownload)},
         signal,
+        'high',
       );
       console.log(
         `[ProviderPerf] getStream ${providerValue} ${
@@ -416,6 +420,7 @@ export class ProviderManager {
         'getEpisodes',
         {url},
         signal,
+        'high',
       );
       return this.requireArray<EpisodeLink>(
         episodes,

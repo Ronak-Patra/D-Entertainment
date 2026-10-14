@@ -151,7 +151,7 @@ export const findDownloadedFileForMedia = async (
   }
 
   // 5. Legacy sanitized local file
-  if (primaryTitle) {
+  if (primaryTitle && allDownloads.length > 0) {
     const file = (
       primaryTitle +
       (secondaryTitle || '') +
@@ -440,10 +440,14 @@ export const useStream = ({
       console.log('Fetching stream for:', activeEpisode);
 
       // 1. Check for downloaded content first
-      const downloadedPath = await findDownloadedFileForMedia(
-        activeEpisode,
-        routeParams,
-      );
+      const allDownloadsList = Object.values(useDownloadsStore.getState().downloads);
+      const hasLocalCandidate = allDownloadsList.length > 0 || isLocalPath(activeEpisode?.link) || isLocalPath(activeEpisode?.filePath) || (routeParams?.directUrl && isLocalPath(routeParams.directUrl));
+      const downloadedPath = hasLocalCandidate
+        ? await findDownloadedFileForMedia(
+            activeEpisode,
+            routeParams,
+          )
+        : null;
       const localStream: Stream | null = downloadedPath
         ? { server: 'Downloaded', link: downloadedPath, type: 'mp4' }
         : null;
@@ -578,7 +582,13 @@ export const useStream = ({
     }
   }, [localFailed, selectedStream, streamData, error]);
 
-  const isPlayingLocal = isLocalPath(selectedStream?.link);
+  const isPlayingLocal =
+    Boolean(isLocalPath(selectedStream?.link)) ||
+    selectedStream?.type === 'local' ||
+    selectedStream?.server === 'Downloaded' ||
+    selectedStream?.server === 'Local Video' ||
+    Boolean(routeParams?.directUrl && isLocalPath(routeParams.directUrl)) ||
+    Boolean(activeEpisode?.link && isLocalPath(activeEpisode.link));
 
   // Keep fetched subtitles available for selection during local playback too.
   useEffect(() => {

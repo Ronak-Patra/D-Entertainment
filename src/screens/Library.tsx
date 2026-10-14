@@ -212,6 +212,7 @@ const Library = () => {
         link: item.link,
         provider: item.provider,
         poster: item.poster,
+        title: item.title,
       });
     }
   };

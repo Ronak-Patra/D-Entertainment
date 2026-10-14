@@ -74,8 +74,17 @@ const Preferences = ({navigation}: any) => {
   useFocusEffect(useCallback(() => {
     setTmdbInputKey(settingsStorage.getTmdbApiKey());
   }, []));
-  const [disableDrawer, setDisableDrawer] = useState(
-    () => settingsStorage.getBool('disableDrawer') || false,
+  const disableDrawer = useNavigationPreferencesStore(
+    state => state.disableDrawer,
+  );
+  const setDisableDrawer = useNavigationPreferencesStore(
+    state => state.setDisableDrawer,
+  );
+  const showHamburgerMenu = useNavigationPreferencesStore(
+    state => state.showHamburgerMenu,
+  );
+  const setShowHamburgerMenu = useNavigationPreferencesStore(
+    state => state.setShowHamburgerMenu,
   );
 
   const [ExcludedQualities, setExcludedQualities] = useState(() =>
@@ -84,10 +93,6 @@ const Preferences = ({navigation}: any) => {
 
   const [showMediaControls, setShowMediaControls] = useState<boolean>(() =>
     settingsStorage.showMediaControls(),
-  );
-
-  const [showHamburgerMenu, setShowHamburgerMenu] = useState<boolean>(() =>
-    settingsStorage.showHamburgerMenu(),
   );
 
   const [hideSeekButtons, setHideSeekButtons] = useState<boolean>(() =>
@@ -109,7 +114,7 @@ const Preferences = ({navigation}: any) => {
     settingsStorage.isAutoPlayNextEpisodeEnabled(),
   );
 
-  const [_enable2xGesture, _setEnable2xGesture] = useState<boolean>(() =>
+  const [enable2xGesture, setEnable2xGesture] = useState<boolean>(() =>
     settingsStorage.isEnable2xGestureEnabled(),
   );
 
@@ -204,7 +209,7 @@ const Preferences = ({navigation}: any) => {
           <AppText
             role="bodyLarge"
             className="mb-7 mt-1 text-m3-on-surface-variant">
-            Shape how Vega looks, plays, and downloads
+            Shape how D Entertainment looks, plays, and downloads
           </AppText>
 
           <SettingsSection title="Experience">
@@ -237,11 +242,9 @@ const Preferences = ({navigation}: any) => {
             />
             <SettingsSwitchRow
               title="Hamburger menu"
+              description="Show the provider menu button on the Home header"
               value={showHamburgerMenu}
-              onValueChange={next => {
-                settingsStorage.setShowHamburgerMenu(next);
-                setShowHamburgerMenu(next);
-              }}
+              onValueChange={setShowHamburgerMenu}
             />
             <SettingsSwitchRow
               title="Continue watching"
@@ -251,11 +254,9 @@ const Preferences = ({navigation}: any) => {
             />
             <SettingsSwitchRow
               title="Disable drawer"
+              description="Disable the sidebar provider drawer and its gestures on Home"
               value={disableDrawer}
-              onValueChange={next => {
-                settingsStorage.setBool('disableDrawer', next);
-                setDisableDrawer(next);
-              }}
+              onValueChange={setDisableDrawer}
             />
             <SettingsSwitchRow
               title="External downloader"
@@ -305,7 +306,7 @@ const Preferences = ({navigation}: any) => {
             <SettingsSection title="Privacy">
               <SettingsSwitchRow
                 title="Usage and crash reports"
-                description="Help improve Vega with anonymous diagnostics"
+                description="Help improve D Entertainment with anonymous diagnostics"
                 value={telemetryOptIn}
                 divider={false}
                 onValueChange={async next => {
@@ -398,6 +399,15 @@ const Preferences = ({navigation}: any) => {
               onValueChange={next => {
                 settingsStorage.setShowSleepTimer(next);
                 setShowSleepTimer(next);
+              }}
+            />
+            <SettingsSwitchRow
+              title="2x speed gesture"
+              description="Press and hold anywhere on the video to play at 2x speed"
+              value={enable2xGesture}
+              onValueChange={next => {
+                settingsStorage.setEnable2xGesture(next);
+                setEnable2xGesture(next);
               }}
             />
             <SettingsSwitchRow

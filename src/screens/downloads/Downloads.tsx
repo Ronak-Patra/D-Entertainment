@@ -40,6 +40,8 @@ import DownloadsEmptyState from './components/DownloadsEmptyState';
 import DownloadsSelectionBottomBar from './components/DownloadsSelectionBottomBar';
 import DownloadsSelectionHeader from './components/DownloadsSelectionHeader';
 import {deleteDownloadedMediaGroups} from './utils/deleteDownloadGroups';
+import * as DocumentPicker from 'expo-document-picker';
+import {useInAppPlayerStore} from '../../lib/zustand/inAppPlayerStore';
 
 const Downloads = () => {
   const insets = useSafeAreaInsets();
@@ -289,6 +291,56 @@ const Downloads = () => {
     });
   };
 
+  const handlePlayLocalVideo = async () => {
+    try {
+      triggerHaptic(HapticFeedbackTypes.effectClick);
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'video/*',
+          'video/mp4',
+          'video/x-matroska',
+          'video/quicktime',
+          'video/x-msvideo',
+          'video/webm',
+          'video/x-m4v',
+        ],
+        multiple: false,
+        copyToCacheDirectory: false,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        return;
+      }
+
+      const file = result.assets[0];
+      const fileName = file.name || 'Local Video';
+
+      useInAppPlayerStore.getState().openPlayer({
+        episodeList: [
+          {
+            id: file.uri,
+            title: fileName,
+            link: file.uri,
+          },
+        ],
+        linkIndex: 0,
+        type: 'local',
+        directUrl: file.uri,
+        primaryTitle: fileName,
+        poster: {},
+        providerValue: 'Local Video',
+        alwaysCast: false,
+      });
+    } catch (err) {
+      console.error('Error selecting local video:', err);
+      showAppDialog({
+        title: 'Error opening video',
+        message: 'Could not open the selected video file.',
+        actions: [{label: 'OK'}],
+      });
+    }
+  };
+
   const isAllSelected =
     groups.length > 0 && selectedGroupIds.size === groups.length;
 
@@ -342,20 +394,11 @@ const Downloads = () => {
                   className="text-m3-on-background">
                   Downloads
                 </AppText>
-                {groups.length > 0 ? (
+                <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
                   <TVFocusable
-                    ref={selectButtonRef}
-                    onLayout={updateSelectButtonNode}
                     accessibilityRole="button"
-                    accessibilityLabel="Select items"
-                    nextFocusRight={selectButtonNode ?? undefined}
-                    nextFocusUp={selectButtonNode ?? undefined}
-                    nextFocusDown={firstCardNode ?? undefined}
-                    nextFocusLeft={firstCardNode ?? undefined}
-                    onPress={() => {
-                      triggerHaptic(HapticFeedbackTypes.effectClick);
-                      setIsSelectionModeActive(true);
-                    }}
+                    accessibilityLabel="Play Local Video"
+                    onPress={handlePlayLocalVideo}
                     borderRadius={18}
                     focusScale={1.08}
                     focusBorderColor={focusBorderColor}
@@ -367,20 +410,60 @@ const Downloads = () => {
                       gap: 6,
                       justifyContent: 'center',
                       minHeight: 36,
-                      paddingHorizontal: 14,
+                      paddingHorizontal: 12,
                     }}>
                     <MaterialCommunityIcons
-                      name="checkbox-multiple-marked-outline"
+                      name="folder-play-outline"
                       size={18}
                       color={colors.primary}
                     />
                     <AppText
                       role="labelLargeEmphasized"
                       style={{color: colors.primary}}>
-                      Select
+                      Play Local Video
                     </AppText>
                   </TVFocusable>
-                ) : null}
+
+                  {groups.length > 0 ? (
+                    <TVFocusable
+                      ref={selectButtonRef}
+                      onLayout={updateSelectButtonNode}
+                      accessibilityRole="button"
+                      accessibilityLabel="Select items"
+                      nextFocusRight={selectButtonNode ?? undefined}
+                      nextFocusUp={selectButtonNode ?? undefined}
+                      nextFocusDown={firstCardNode ?? undefined}
+                      nextFocusLeft={firstCardNode ?? undefined}
+                      onPress={() => {
+                        triggerHaptic(HapticFeedbackTypes.effectClick);
+                        setIsSelectionModeActive(true);
+                      }}
+                      borderRadius={18}
+                      focusScale={1.08}
+                      focusBorderColor={focusBorderColor}
+                      style={{
+                        alignItems: 'center',
+                        backgroundColor: colors.surfaceContainerHigh,
+                        borderRadius: 18,
+                        flexDirection: 'row',
+                        gap: 6,
+                        justifyContent: 'center',
+                        minHeight: 36,
+                        paddingHorizontal: 14,
+                      }}>
+                      <MaterialCommunityIcons
+                        name="checkbox-multiple-marked-outline"
+                        size={18}
+                        color={colors.primary}
+                      />
+                      <AppText
+                        role="labelLargeEmphasized"
+                        style={{color: colors.primary}}>
+                        Select
+                      </AppText>
+                    </TVFocusable>
+                  ) : null}
+                </View>
               </View>
               <CurrentDownloadsSection
                 primary={colors.primary}
@@ -440,6 +523,7 @@ const Downloads = () => {
             exploreButtonRef={exploreButtonRef}
             onExploreLayout={updateExploreButtonNode}
             preferredFocus={currentDownloads.length === 0}
+            onPlayLocalVideo={handlePlayLocalVideo}
             onExplore={() => {
               navigation.getParent<any>()?.navigate('HomeStack');
             }}

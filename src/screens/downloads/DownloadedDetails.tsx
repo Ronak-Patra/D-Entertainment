@@ -1,3 +1,4 @@
+import {useInAppPlayerStore} from '../../lib/zustand/inAppPlayerStore';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type {CompositeScreenProps} from '@react-navigation/native';
@@ -199,7 +200,7 @@ const DownloadedDetails = ({navigation, route}: DownloadedDetailsProps) => {
     const playableItems = items.filter(
       candidate => candidate.status === 'completed',
     );
-    navigation.navigate('Player', {
+    useInAppPlayerStore.getState().openPlayer( {
       episodeList: playableItems.map(candidate => ({
         id: candidate.id,
         title: candidate.episodeName || candidate.title,
@@ -216,7 +217,7 @@ const DownloadedDetails = ({navigation, route}: DownloadedDetailsProps) => {
         poster: metadata.poster,
         background: metadata.background,
       },
-      providerValue: item.provider || metadata.provider || 'vega',
+      providerValue: item.provider || metadata.provider || 'D Entertainment',
       infoUrl: item.infoUrl || metadata.infoUrl,
       alwaysCast: !isTV && settingsStorage.isAlwaysCastMode(),
     });
@@ -237,7 +238,7 @@ const DownloadedDetails = ({navigation, route}: DownloadedDetailsProps) => {
   const backgroundImage =
     metadata.background ||
     metadata.poster ||
-    'https://placehold.jp/24/171717/ffffff/800x450.png?text=Vega';
+    '';
   const hasArtwork = !!(metadata.background || metadata.poster);
   const posterTop = isTV ? 24 : insets.top + 12;
   const posterBottom = 12 + titleHeight + 12;

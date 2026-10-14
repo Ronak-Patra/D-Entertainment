@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useTmdbStory } from '../../../lib/hooks/useTmdbStory';
+import { useTmdbStory, type TmdbStoryData } from '../../../lib/hooks/useTmdbStory';
 import { useM3Colors, useM3HostTheme } from '../../../theme/M3PaletteContext';
 import { TVFocusGuide } from '../../../components/tv';
 import { isTV } from '../../../lib/tv/constants';
@@ -30,22 +30,26 @@ interface InfoStoryModalProps {
   fallbackBackdrop?: string;
   fallbackOverview?: string;
   fallbackTitle?: string;
+  fallbackYear?: string | number;
   imdbId?: string;
   onClose: () => void;
   tmdbId?: number | string;
   type?: string;
   visible: boolean;
+  onPersonPress?: (id: string | number, name: string) => void;
 }
 
 const InfoStoryModal = ({
   fallbackBackdrop,
   fallbackOverview,
   fallbackTitle,
+  fallbackYear,
   imdbId,
   onClose,
   tmdbId,
   type,
   visible,
+  onPersonPress,
 }: InfoStoryModalProps) => {
   const colors = useM3Colors();
   const hostTheme = useM3HostTheme();
@@ -67,12 +71,39 @@ const InfoStoryModal = ({
     }, 400);
   }, []);
 
-  const { data, error, isFetching, refetch } = useTmdbStory({
+  const { data: rawData, error, isFetching, refetch } = useTmdbStory({
     enabled: visible,
     imdbId,
     tmdbId,
     type,
+    title: fallbackTitle,
+    year: fallbackYear,
   });
+
+  const data = useMemo<TmdbStoryData | undefined>(() => {
+    if (rawData) return rawData;
+    if (fallbackTitle || fallbackOverview || fallbackBackdrop) {
+      return {
+        id: tmdbId || imdbId || fallbackTitle || 'story-fallback',
+        mediaType: (type === 'tv' || type === 'series' ? 'tv' : 'movie') as any,
+        title: fallbackTitle || 'Untitled',
+        overview: fallbackOverview,
+        backdropPath: fallbackBackdrop,
+        backdropPaths: fallbackBackdrop ? [fallbackBackdrop] : [],
+        posterPath: fallbackBackdrop,
+        genres: [],
+        cast: [],
+        creators: [],
+        companies: [],
+        countries: [],
+        networks: [],
+        keywords: [],
+        collectionItems: [],
+        trailers: [],
+      };
+    }
+    return undefined;
+  }, [rawData, fallbackTitle, fallbackOverview, fallbackBackdrop, tmdbId, imdbId, type]);
 
   const pages = useMemo<StoryPage[]>(() => {
     const items: StoryPage[] = [
@@ -249,7 +280,7 @@ const InfoStoryModal = ({
             onInteract={handleInteract}
           />
         ) : item.key === 'cast' ? (
-          <CastPage data={data} onInteract={handleInteract} />
+          <CastPage data={data} onInteract={handleInteract} onPersonPress={onPersonPress} />
         ) : item.key === 'boxoffice' ? (
           <BoxOfficePage data={data} />
         ) : item.key === 'ratings' ? (

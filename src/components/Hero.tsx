@@ -38,6 +38,7 @@ import {
 } from '../lib/hooks/useHomePageData';
 import useContentStore from '../lib/zustand/contentStore';
 import useHeroStore from '../lib/zustand/herostore';
+import useNavigationPreferencesStore from '../lib/zustand/navigationPreferencesStore';
 import {useM3Colors} from '../theme/M3PaletteContext';
 import {mixHex} from '../theme/seeds';
 import {
@@ -199,6 +200,13 @@ const Hero = memo(
   ({isDrawerOpen, isVisible = true, onOpenDrawer}: HeroProps) => {
     const colors = useM3Colors();
     const insets = useSafeAreaInsets();
+    const disableDrawer = useNavigationPreferencesStore(
+      state => state.disableDrawer,
+    );
+    const showHamburgerMenu = useNavigationPreferencesStore(
+      state => state.showHamburgerMenu,
+    );
+    const shouldShowHamburger = !disableDrawer && showHamburgerMenu;
     const [logoFailed, setLogoFailed] = useState(false);
     const [searchActive, setSearchActive] = useState(false);
     const [searchText, setSearchText] = useState('');
@@ -303,9 +311,16 @@ const Hero = memo(
       opacity: 1 - Math.min(Math.abs(dragX.get()) / 300, 0.35),
       transform: [{translateX: dragX.get()}],
     }));
+    const heroActualProvider =
+      (hero as any)?.provider && (hero as any)?.provider !== 'all'
+        ? (hero as any).provider
+        : provider.value !== 'all'
+          ? provider.value
+          : (useContentStore.getState().installedProviders.find(p => !p.disabled && p.value !== 'all')?.value || 'vega');
+
     const {data: heroData, error} = useHeroMetadata(
       hero?.link || '',
-      provider.value,
+      heroActualProvider,
     );
 
     const imageSource = useMemo(
@@ -472,10 +487,11 @@ const Hero = memo(
       }
       navigation.navigate('Info', {
         link: hero.link,
-        provider: provider.value,
+        provider: heroActualProvider,
         poster: heroData?.poster || heroData?.image || heroData?.background,
+        title: heroData?.title || hero?.title,
       });
-    }, [hero, heroData, navigation, provider.value]);
+    }, [hero, heroData, navigation, heroActualProvider]);
 
     return (
       <GestureDetector gesture={swipeGesture}>
@@ -582,26 +598,31 @@ const Hero = memo(
               top: insets.top + (isTV ? 16 : 6),
               zIndex: 30,
             }}>
-            <HeroTopButton
-              ref={hamburgerRef}
-              onLayout={updateHamburgerNode}
-              icon="menu"
-              iconColor={searchButtonColor}
-              label="Open provider drawer"
-              disabled={isDrawerOpen}
-              hasTVPreferredFocus={isTV && !isDrawerOpen}
-              nextFocusRight={searchNode ?? undefined}
-              nextFocusDown={watchNowNode ?? undefined}
-              nextFocusUp={hamburgerNode ?? undefined}
-              onPress={onOpenDrawer}
-            />
+            {shouldShowHamburger ? (
+              <HeroTopButton
+                ref={hamburgerRef}
+                onLayout={updateHamburgerNode}
+                icon="menu"
+                iconColor={searchButtonColor}
+                label="Open provider drawer"
+                disabled={isDrawerOpen}
+                hasTVPreferredFocus={isTV && !isDrawerOpen}
+                nextFocusRight={searchNode ?? undefined}
+                nextFocusDown={watchNowNode ?? undefined}
+                nextFocusUp={hamburgerNode ?? undefined}
+                onPress={onOpenDrawer}
+              />
+            ) : (
+              <View />
+            )}
             <HeroTopButton
               ref={searchRef}
               onLayout={updateSearchNode}
               icon="magnify"
               iconColor={searchButtonColor}
               label={`Search in ${provider.display_name}`}
-              nextFocusLeft={hamburgerNode ?? undefined}
+              hasTVPreferredFocus={isTV && !shouldShowHamburger && !isDrawerOpen}
+              nextFocusLeft={shouldShowHamburger ? hamburgerNode ?? undefined : undefined}
               nextFocusRight={searchNode ?? undefined}
               nextFocusDown={watchNowNode ?? undefined}
               nextFocusUp={searchNode ?? undefined}

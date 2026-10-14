@@ -28,7 +28,12 @@ const ProviderDrawer = ({
 }: ProviderDrawerProps) => {
   const provider = useContentStore(state => state.provider);
   const setProvider = useContentStore(state => state.setProvider);
-  const installedProviders = useContentStore(state => state.installedProviders);
+  const rawInstalled = useContentStore(state => state.installedProviders);
+  const installedProviders = React.useMemo(() => {
+    const {providersStorage} = require('../lib/storage');
+    const disabled = providersStorage.getDisabledProviders();
+    return rawInstalled.filter((p: any) => !disabled.includes(p.value));
+  }, [rawInstalled]);
   const hasSelectedProvider = installedProviders.some(
     item => item.value === provider.value,
   );
@@ -115,14 +120,62 @@ const ProviderDrawer = ({
         <ScrollView
           showsVerticalScrollIndicator={false}
           className="flex-1 px-2">
+          
+          {/* All Providers Option */}
+          <TVFocusable
+            onPress={() => handleSelectProvider({
+              value: 'all',
+              display_name: 'All Providers',
+              version: '1.0.0',
+              type: 'combined',
+            })}
+            borderRadius={12}
+            focusScale={1.03}
+            focusBorderColor={focusBorderColor}
+            style={{
+              alignItems: 'center',
+              backgroundColor: provider.value === 'all'
+                ? 'rgba(255, 255, 255, 0.15)'
+                : 'rgba(255, 255, 255, 0.04)',
+              borderRadius: 12,
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              marginVertical: 3,
+              paddingHorizontal: 16,
+              paddingVertical: 13,
+            }}>
+            {({focused}) => (
+              <>
+                <View style={{alignItems: 'center', flexDirection: 'row'}}>
+                  <ProviderIcon
+                    uri=""
+                    name="All Providers"
+                    size={24}
+                    background="rgba(255, 255, 255, 0.08)"
+                    color={focused || provider.value === 'all' ? primary : '#888'}
+                  />
+                  <Text
+                    style={{
+                      color: focused || provider.value === 'all' ? '#FFFFFF' : '#B0B0B0',
+                      fontSize: 16.5,
+                      fontWeight: focused || provider.value === 'all' ? '700' : '500',
+                      marginLeft: 10,
+                    }}>
+                    All Providers
+                  </Text>
+                </View>
+                {provider.value === 'all' && (
+                  <MaterialIcons name="check" size={22} color={primary} />
+                )}
+              </>
+            )}
+          </TVFocusable>
+
           {/* TV keeps a plain list: rows are picked with the remote. */}
           {isTV &&
             installedProviders.map((item, index) => {
               const isSelected = provider.value === item.value;
-              // One preferred item only: the selected provider, else the first.
-              const isPreferred = hasSelectedProvider
-                ? isSelected
-                : index === 0;
+              const isPreferred = hasSelectedProvider ? isSelected : index === 0;
 
               return (
                 <TVFocusable

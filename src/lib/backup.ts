@@ -81,7 +81,7 @@ const BACKUP_SETTINGS: Record<string, SettingType> = {
 type SettingValue = boolean | string | number | string[];
 
 export interface VegaBackup {
-  app: 'vega';
+  app: 'vega' | 'd-entertainment';
   version: number;
   createdAt: string;
   settings: Record<string, SettingValue>;
@@ -177,7 +177,7 @@ export const createBackup = (): VegaBackup => {
   const selected = useContentStore.getState().provider;
 
   return {
-    app: 'vega',
+    app: 'd-entertainment',
     version: BACKUP_VERSION,
     createdAt: new Date().toISOString(),
     settings,
@@ -203,13 +203,13 @@ export const parseBackup = (text: string): VegaBackup => {
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error('This file is not a Vega backup');
+    throw new Error('This file is not a D Entertainment backup');
   }
-  if (data?.app !== 'vega' || typeof data.version !== 'number') {
-    throw new Error('This file is not a Vega backup');
+  if ((data?.app !== 'vega' && data?.app !== 'd-entertainment') || typeof data.version !== 'number') {
+    throw new Error('This file is not a D Entertainment backup');
   }
   if (data.version > BACKUP_VERSION) {
-    throw new Error('This backup was made by a newer version of Vega');
+    throw new Error('This backup was made by a newer version of D Entertainment');
   }
   const {settings, providers} = data;
   if (

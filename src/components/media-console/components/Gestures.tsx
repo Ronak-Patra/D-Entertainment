@@ -17,6 +17,7 @@ import * as Brightness from 'expo-brightness';
 import { VolumeManager } from 'react-native-volume-manager';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { settingsStorage } from '../../../lib/storage';
+import { setVolumeBoost, resetVolumeBoost } from '../../../lib/services/volumeBooster';
 
 import {
   GestureDetector,
@@ -223,6 +224,8 @@ const ControlOverlay = React.memo(
 
     const fadeStyle = useAnimatedStyle(() => ({ opacity: opacity.value }), []);
 
+    const isBoost = isVolume && value > 1;
+
     const containerStyle = useMemo(
       () => ({
         position: 'absolute' as const,
@@ -230,25 +233,27 @@ const ControlOverlay = React.memo(
         marginTop: -102,
         left: isVolume ? ('7%' as const) : undefined,
         right: isVolume ? undefined : ('7%' as const),
-        backgroundColor: 'rgba(0, 0, 0, 0.55)',
+        backgroundColor: isBoost ? 'rgba(32, 20, 0, 0.8)' : 'rgba(0, 0, 0, 0.55)',
+        borderWidth: isBoost ? 1.5 : 0,
+        borderColor: isBoost ? 'rgba(255, 152, 0, 0.5)' : 'transparent',
         borderRadius: 18,
-        width: 56,
+        width: 58,
         paddingHorizontal: 8,
         paddingVertical: 14,
         alignItems: 'center' as const,
         zIndex: 1000,
       }),
-      [isVolume],
+      [isVolume, isBoost],
     );
 
     const textStyle = useMemo(
       () => ({
-        color: 'white',
-        marginBottom: 9,
+        color: isBoost ? '#FF9800' : 'white',
+        marginBottom: isBoost ? 2 : 9,
         fontSize: 13,
-        fontWeight: '600' as const,
+        fontWeight: '700' as const,
       }),
-      [],
+      [isBoost],
     );
 
     const trackStyle = useMemo(
@@ -258,21 +263,23 @@ const ControlOverlay = React.memo(
         borderRadius: 3,
         overflow: 'hidden' as const,
         justifyContent: 'flex-end' as const,
-        backgroundColor: 'rgba(255, 255, 255, 0.3)',
+        backgroundColor: isBoost
+          ? 'rgba(255, 152, 0, 0.25)'
+          : 'rgba(255, 255, 255, 0.3)',
       }),
-      [],
+      [isBoost],
     );
 
     const fillStyle = useMemo(
       () => ({
         width: '100%' as const,
-        height: `${Math.round(
-          Math.max(0, Math.min(1, value)) * 100,
-        )}%` as `${number}%`,
+        height: isBoost
+          ? `${Math.round(Math.min(100, Math.max(0, (value - 1) * 100)))}%` as `${number}%`
+          : `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%` as `${number}%`,
         borderRadius: 3,
-        backgroundColor: 'white',
+        backgroundColor: isBoost ? '#FF9800' : 'white',
       }),
-      [value],
+      [isBoost, value],
     );
 
     const iconStyle = useMemo(() => ({ marginTop: 10 }), []);
@@ -288,16 +295,30 @@ const ControlOverlay = React.memo(
       return 'brightness-6';
     }, [isVolume, value]);
 
+    const iconColor = isBoost ? '#FF9800' : 'white';
+
     if (!mounted) return null;
 
     return (
       <Animated.View style={[containerStyle as any, fadeStyle]}>
+        {isBoost && (
+          <Text
+            style={{
+              color: '#FF9800',
+              fontSize: 9,
+              fontWeight: '900',
+              letterSpacing: 0.6,
+              marginBottom: 2,
+            }}>
+            BOOST
+          </Text>
+        )}
         <Text style={textStyle}>{Math.round(value * 100)}%</Text>
         <View style={trackStyle}>
           <View style={fillStyle} />
         </View>
         <View style={iconStyle}>
-          <Icon name={iconName} size={22} color="white" />
+          <Icon name={iconName} size={22} color={iconColor} />
         </View>
       </Animated.View>
     );
@@ -335,6 +356,8 @@ const Gestures = ({
   const [isVolumeVisible, setIsVolumeVisible] = useState(false);
   const [isBrightnessVisible, setIsBrightnessVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSeekVisible, setIsSeekVisible] = useState(false);
+  const [seekDelta, setSeekDelta] = useState(0);
 
   // Memoize screen dimensions
   const screenDimensions = useMemo(() => Dimensions.get('window'), []);
@@ -368,6 +391,7 @@ const Gestures = ({
   const toastOpacity = useSharedValue(0);
   const is2xActiveShared = useSharedValue(false);
   const isPanActive = useSharedValue(false);
+  const panDirection = useSharedValue<'horizontal' | 'vertical' | null>(null);
 
   // Toast styles (inline, no Tailwind)
   const toastAnimatedStyle = useAnimatedStyle(
@@ -419,8 +443,26 @@ const Gestures = ({
     });
   }, [toastOpacity]);
 
+  const applySwipeSeek = useCallback(() => {
+    if (seekDelta !== 0) {
+      if (seekDelta > 0) {
+        forward(seekDelta);
+      } else {
+        rewind(Math.abs(seekDelta));
+      }
+      setSeekDelta(0);
+    }
+  }, [seekDelta, forward, rewind]);
+
   const start2x = useCallback(() => {
-    if (disableGesture || showControls || isPanActive.value) return;
+    if (
+      disableGesture ||
+      showControls ||
+      isPanActive.value ||
+      !settingsStorage.isEnable2xGestureEnabled()
+    ) {
+      return;
+    }
     if (settingsStorage.isHapticFeedbackEnabled()) {
       ReactNativeHapticFeedback.trigger('impactMedium', {
         enableVibrateFallback: true,
@@ -449,7 +491,13 @@ const Gestures = ({
 
   const handleTouchDown = useCallback(
     (x: number, y: number) => {
-      if (disableGesture || showControls) return;
+      if (
+        disableGesture ||
+        showControls ||
+        !settingsStorage.isEnable2xGestureEnabled()
+      ) {
+        return;
+      }
       cancel2x();
       touchStartPosRef.current = { x, y };
       longPressTimeoutRef.current = setTimeout(() => {
@@ -623,10 +671,40 @@ const Gestures = ({
     ],
   );
 
-  const updateSystemVolume = useCallback((newVolume: number) => {
-    const clampedVolume = Math.max(0, Math.min(1, newVolume));
-    VolumeManager.setVolume(clampedVolume);
-    setDisplayVolume(clampedVolume);
+  const boostActiveRef = useRef(false);
+
+  const updateVolumeWithBoost = useCallback((newVolume: number) => {
+    if (newVolume <= 1.0) {
+      const clampedVolume = Math.max(0, newVolume);
+      VolumeManager.setVolume(clampedVolume);
+      resetVolumeBoost();
+      setDisplayVolume(clampedVolume);
+
+      if (boostActiveRef.current) {
+        boostActiveRef.current = false;
+        if (settingsStorage.isHapticFeedbackEnabled()) {
+          ReactNativeHapticFeedback.trigger('effectTick', {
+            enableVibrateFallback: true,
+            ignoreAndroidSystemSettings: false,
+          });
+        }
+      }
+    } else {
+      const clampedBoost = Math.min(2.0, newVolume);
+      VolumeManager.setVolume(1.0);
+      setVolumeBoost(clampedBoost);
+      setDisplayVolume(clampedBoost);
+
+      if (!boostActiveRef.current) {
+        boostActiveRef.current = true;
+        if (settingsStorage.isHapticFeedbackEnabled()) {
+          ReactNativeHapticFeedback.trigger('impactMedium', {
+            enableVibrateFallback: true,
+            ignoreAndroidSystemSettings: false,
+          });
+        }
+      }
+    }
   }, []);
 
   const updateSystemBrightness = useCallback((newBrightness: number) => {
@@ -645,6 +723,7 @@ const Gestures = ({
           'worklet';
           isPanActive.value = false;
           is2xActiveShared.value = false;
+          panDirection.value = null;
           if (event.allTouches && event.allTouches.length > 0) {
             runOnJS(handleTouchDown)(
               event.allTouches[0].x,
@@ -675,15 +754,14 @@ const Gestures = ({
             return;
           }
           isPanActive.value = true;
+          panDirection.value = null;
           runOnJS(cancel2x)();
           const isLeftSide = event.x < (gestureWidth.value || SCREEN_WIDTH) / 2;
 
           if (isLeftSide) {
             startBrightness.value = brightnessValue.value;
-            runOnJS(setIsBrightnessVisible)(true);
           } else {
             startVolume.value = volumeValue.value;
-            runOnJS(setIsVolumeVisible)(true);
           }
         })
         .onUpdate((event) => {
@@ -691,25 +769,47 @@ const Gestures = ({
           if (is2xActiveShared.value || !isPanActive.value) {
             return;
           }
-          const isLeftSide = event.x < (gestureWidth.value || SCREEN_WIDTH) / 2;
-          const change = -event.translationY / SWIPE_RANGE;
 
-          if (isLeftSide) {
-            // Brightness control
-            const newBrightness = Math.max(
-              0,
-              Math.min(1, startBrightness.value + change),
-            );
-            brightnessValue.value = newBrightness;
-            runOnJS(updateSystemBrightness)(newBrightness);
-          } else {
-            // Volume control
-            const newVolume = Math.max(
-              0,
-              Math.min(1, startVolume.value + change),
-            );
-            volumeValue.value = newVolume;
-            runOnJS(updateSystemVolume)(newVolume);
+          if (panDirection.value === null) {
+            if (Math.abs(event.translationX) > 10 || Math.abs(event.translationY) > 10) {
+              if (Math.abs(event.translationX) > Math.abs(event.translationY)) {
+                panDirection.value = 'horizontal';
+                runOnJS(setIsSeekVisible)(true);
+              } else {
+                panDirection.value = 'vertical';
+                const isLeftSide = event.x < (gestureWidth.value || SCREEN_WIDTH) / 2;
+                if (isLeftSide) {
+                  runOnJS(setIsBrightnessVisible)(true);
+                } else {
+                  runOnJS(setIsVolumeVisible)(true);
+                }
+              }
+            }
+          }
+
+          if (panDirection.value === 'vertical') {
+            const isLeftSide = event.x < (gestureWidth.value || SCREEN_WIDTH) / 2;
+            const change = -event.translationY / SWIPE_RANGE;
+
+            if (isLeftSide) {
+              const newBrightness = Math.max(
+                0,
+                Math.min(1, startBrightness.value + change),
+              );
+              brightnessValue.value = newBrightness;
+              runOnJS(updateSystemBrightness)(newBrightness);
+            } else {
+              const newVolume = Math.max(
+                0,
+                Math.min(2, startVolume.value + change),
+              );
+              volumeValue.value = newVolume;
+              runOnJS(updateVolumeWithBoost)(newVolume);
+            }
+          } else if (panDirection.value === 'horizontal') {
+            // 5 pixels = 1 second
+            const deltaSeconds = Math.round(event.translationX / 5);
+            runOnJS(setSeekDelta)(deltaSeconds);
           }
         })
         .onFinalize(() => {
@@ -719,6 +819,12 @@ const Gestures = ({
           runOnJS(handleTouchUp)();
           runOnJS(setIsVolumeVisible)(false);
           runOnJS(setIsBrightnessVisible)(false);
+          runOnJS(setIsSeekVisible)(false);
+
+          if (panDirection.value === 'horizontal') {
+            runOnJS(applySwipeSeek)();
+          }
+          panDirection.value = null;
         }),
     [
       SCREEN_WIDTH,
@@ -726,12 +832,13 @@ const Gestures = ({
       disableGesture,
       is2xActiveShared,
       isPanActive,
+      panDirection,
       handleTouchDown,
       handleTouchMove,
       handleTouchUp,
       cancel2x,
       updateSystemBrightness,
-      updateSystemVolume,
+      updateVolumeWithBoost,
     ],
   );
 
@@ -779,6 +886,7 @@ const Gestures = ({
   // Cleanup useEffect
   useEffect(() => {
     return () => {
+      resetVolumeBoost();
       if (skipTimeoutRef.current) {
         clearTimeout(skipTimeoutRef.current);
       }
@@ -903,6 +1011,23 @@ const Gestures = ({
           isLeft={false}
           totalTime={totalSkipTime}
         />
+        {isSeekVisible && seekDelta !== 0 && (
+          <View style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: [{ translateX: -40 }, { translateY: -20 }],
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            padding: 10,
+            borderRadius: 8,
+            alignItems: 'center',
+            zIndex: 2000
+          }}>
+            <Text style={{ color: 'white', fontSize: 20, fontWeight: 'bold' }}>
+              {seekDelta > 0 ? `+${seekDelta}s` : `${seekDelta}s`}
+            </Text>
+          </View>
+        )}
         {toastMessage ? (
           <Animated.View
             style={[toastContainerStyle as any, toastAnimatedStyle]}>

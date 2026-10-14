@@ -87,6 +87,7 @@ function withCustomNativeModules(config) {
       'ProviderHttpPackage()',
       'RemoteDeliveryPackage()',
       'DlnaPackage()',
+      'VolumeBoosterPackage()',
     ];
 
     for (const pkg of packagesToAdd) {

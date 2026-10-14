@@ -121,11 +121,22 @@ export const selectDownloadLocation = async (): Promise<
     if (!permissions.granted) {
       return undefined;
     }
-    return {
-      type: 'saf',
-      uri: permissions.directoryUri,
-      label: getAndroidDirectoryLabel(permissions.directoryUri),
-    };
+    
+    try {
+      const subFolderUri = await getOrCreateSafDirectory(permissions.directoryUri, 'D Entertainment');
+      return {
+        type: 'saf',
+        uri: subFolderUri,
+        label: getAndroidDirectoryLabel(subFolderUri),
+      };
+    } catch (e) {
+      // Fallback if subdirectory creation fails
+      return {
+        type: 'saf',
+        uri: permissions.directoryUri,
+        label: getAndroidDirectoryLabel(permissions.directoryUri),
+      };
+    }
   }
 
   const pickedFolders = await RNFS.pickFile({pickerType: 'folder'});
@@ -133,8 +144,18 @@ export const selectDownloadLocation = async (): Promise<
   if (!pickedFolder) {
     return undefined;
   }
-  const path = pickedFolder.replace(/^file:\/\//, '');
-  return {type: 'path', path, label: path};
+  const basePath = pickedFolder.replace(/^file:\/\//, '');
+  const targetPath = `${basePath}/D Entertainment`;
+  
+  try {
+    const exists = await RNFS.exists(targetPath);
+    if (!exists) {
+      await RNFS.mkdir(targetPath);
+    }
+    return {type: 'path', path: targetPath, label: targetPath};
+  } catch (e) {
+    return {type: 'path', path: basePath, label: basePath};
+  }
 };
 
 export const validateDownloadLocationAccess = async (

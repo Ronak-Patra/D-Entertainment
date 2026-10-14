@@ -13,6 +13,7 @@ import {useIsFocused} from '@react-navigation/native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {SettingsStackParamList} from '../../App';
 import {MaterialCommunityIcons, FontAwesome6} from '@expo/vector-icons';
+import Button from '../../components/ui/Button';
 import useContentStore from '../../lib/zustand/contentStore';
 import {
   extensionStorage,
@@ -123,6 +124,38 @@ const Extensions = ({navigation, route}: Props) => {
   const [refreshing, setRefreshing] = useState(false);
   const [isAtTop, setIsAtTop] = useState(true);
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [disabledProviders, setDisabledProviders] = useState<string[]>(
+    () => (require('../../lib/storage').providersStorage).getDisabledProviders()
+  );
+
+  const handleToggleDisable = useCallback((provider: ProviderExtension) => {
+    const providersStorage = require('../../lib/storage').providersStorage;
+    const newDisabled = providersStorage.toggleProvider(provider.value);
+    setDisabledProviders([...newDisabled]);
+
+    // Keep useContentStore's active installedProviders in sync
+    const allInstalled = extensionStorage.getInstalledProviders();
+    const activeInstalled = allInstalled.filter(p => !newDisabled.includes(p.value));
+    useContentStore.getState().setInstalledProviders(activeInstalled);
+
+    // Check if we just disabled the active provider
+    const currentProvider = useContentStore.getState().provider;
+    if (
+      currentProvider &&
+      (newDisabled.includes(currentProvider.value) || currentProvider.value === provider.value) &&
+      newDisabled.includes(provider.value)
+    ) {
+      // Find another active provider or fallback to 'all'
+      const nextActive =
+        activeInstalled[0] || {
+          value: 'all',
+          display_name: 'All Providers',
+          version: '1.0.0',
+          type: 'combined',
+        };
+      useContentStore.getState().setProvider(nextActive as any);
+    }
+  }, []);
   const [providerTest, setProviderTest] = useState<ProviderTestState | null>(
     null,
   );
@@ -201,7 +234,8 @@ const Extensions = ({navigation, route}: Props) => {
     const available = selectedAuthor
       ? extensionStorage.getAvailableProviders(selectedAuthor)
       : [];
-    setInstalledProviders(installed);
+    const disabled = (require('../../lib/storage').providersStorage).getDisabledProviders();
+    setInstalledProviders(installed.filter(p => !disabled.includes(p.value)));
     setAvailableProviders(available.filter(item => item && !item.disabled));
     setActiveSourceAuthor(selectedAuthor);
   };
@@ -495,6 +529,53 @@ const Extensions = ({navigation, route}: Props) => {
     }
   };
 
+  const handleTestAll = async () => {
+    const installed = extensionStorage.getInstalledProviders() || [];
+    installed.forEach(async provider => {
+      const providerKey = `${provider.source?.author || ''}:${provider.value}`;
+      setProviderTestStatuses(current => ({
+        ...current,
+        [providerKey]: 'testing',
+      }));
+      
+      try {
+        const controller = new AbortController();
+        await testProvider(provider.value, () => {}, controller.signal);
+        setProviderTestStatuses(current => ({
+          ...current,
+          [providerKey]: 'working',
+        }));
+      } catch (error) {
+        setProviderTestStatuses(current => ({
+          ...current,
+          [providerKey]: 'failed',
+        }));
+      }
+    });
+  };
+
+  const handleInstallAll = async () => {
+    const uninstalled = currentData.filter(p => !installedKeys.has(providerListKey(p)));
+    if (uninstalled.length === 0) return;
+    
+    for (const provider of uninstalled) {
+      setInstallingProvider(`${provider.source?.author || ''}:${provider.value}`);
+      try {
+        await extensionManager.installProvider(provider);
+      } catch (e) {}
+    }
+    setInstallingProvider(null);
+    loadProviders();
+    const installed = extensionStorage.getInstalledProviders() || [];
+    setInstalledProviders(installed);
+    const curr = useContentStore.getState().provider;
+    if (!curr?.value || curr.value === '') {
+      if (installed.length > 0) {
+        setActiveExtensionProvider(installed[0]);
+      }
+    }
+  };
+
   const refreshProviders = async (sourceAuthor: string) => {
     setRefreshing(true);
     try {
@@ -542,10 +623,15 @@ const Extensions = ({navigation, route}: Props) => {
   const handleRefresh = async () => {
     await refreshProviders(activeSourceAuthor);
   };
+  const rawInstalledExtensions = useMemo(
+    () => extensionStorage.getInstalledProviders() || [],
+    [installedProviders, disabledProviders],
+  );
+
   const currentData = useMemo(() => {
     const allProviders = [
       ...(availableProviders || []),
-      ...(installedProviders || []),
+      ...rawInstalledExtensions,
     ].filter(item => item && item.value);
 
     const providersMap = new Map<string, ProviderExtension>();
@@ -560,11 +646,11 @@ const Extensions = ({navigation, route}: Props) => {
     }
 
     return Array.from(providersMap.values());
-  }, [availableProviders, installedProviders]);
+  }, [availableProviders, rawInstalledExtensions]);
 
   const installedKeys = useMemo(
-    () => new Set(installedProviders.map(providerListKey)),
-    [installedProviders],
+    () => new Set(rawInstalledExtensions.map(providerListKey)),
+    [rawInstalledExtensions],
   );
   const updatesByKey = useMemo(
     () => new Map(updateInfos.map(info => [providerListKey(info.provider), info])),
@@ -598,6 +684,8 @@ const Extensions = ({navigation, route}: Props) => {
           hasUpdate={hasUpdate}
           hasSettings={item.hasSettings}
           primary={primary}
+          isDisabled={disabledProviders.includes(item.value)}
+          onToggleDisable={() => handleToggleDisable(item)}
           onActivate={() => handleSetActiveProvider(item)}
           onInstall={() => handleInstallProvider(item)}
           onUpdate={() =>
@@ -617,6 +705,8 @@ const Extensions = ({navigation, route}: Props) => {
       updatesByKey,
       providerTestStatuses,
       primary,
+      disabledProviders,
+      handleToggleDisable,
     ],
   );
 
@@ -688,6 +778,19 @@ const Extensions = ({navigation, route}: Props) => {
           await refreshProviders(author);
         }}
       />
+
+      <View className="px-5 mt-4 flex-row justify-between" style={{gap: 12}}>
+        <View style={{flex: 1}}>
+          <Button variant="tonal" onPress={handleInstallAll}>
+            1-Click Install All
+          </Button>
+        </View>
+        <View style={{flex: 1}}>
+          <Button variant="outlined" onPress={handleTestAll}>
+            Test All
+          </Button>
+        </View>
+      </View>
 
       <View className="mb-1 mt-6 flex-row items-center justify-between px-5">
         <AppText role="titleLargeEmphasized" className="text-m3-on-background">

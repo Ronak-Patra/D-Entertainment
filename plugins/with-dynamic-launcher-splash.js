@@ -128,7 +128,31 @@ const withLauncherStyles = config =>
     return stylesConfig;
   });
 
-const bootThemeMethod = `  private fun getBootTheme(): Int {
+const pipAndThemeMethods = `  companion object {
+    @JvmStatic
+    var isVideoPlaying: Boolean = false
+    @JvmStatic
+    var currentMainActivity: MainActivity? = null
+  }
+
+  fun updatePipParams(active: Boolean) {
+    isVideoPlaying = active
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+      try {
+        val builder = android.app.PictureInPictureParams.Builder()
+          .setAspectRatio(android.util.Rational(16, 9))
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+          builder.setAutoEnterEnabled(active)
+          builder.setSeamlessResizeEnabled(true)
+        }
+        setPictureInPictureParams(builder.build())
+      } catch (e: Exception) {
+        // Ignore if activity is not eligible or PiP not supported
+      }
+    }
+  }
+
+  private fun getBootTheme(): Int {
     val launchedAlias = intent?.component?.className?.substringAfterLast('.')
     val selectedIcon = getSharedPreferences("vega_launcher", MODE_PRIVATE)
       .getString("icon", null) ?: when (launchedAlias) {
@@ -148,23 +172,72 @@ const bootThemeMethod = `  private fun getBootTheme(): Int {
     }
   }
 
+  override fun onResume() {
+    super.onResume()
+    currentMainActivity = this
+    if (isVideoPlaying) {
+      updatePipParams(true)
+    }
+  }
+
+  override fun onDestroy() {
+    super.onDestroy()
+    if (currentMainActivity == this) {
+      currentMainActivity = null
+    }
+  }
+
+  override fun onUserLeaveHint() {
+    super.onUserLeaveHint()
+    if (isVideoPlaying && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+      try {
+        if (!isInPictureInPictureMode) {
+          val builder = android.app.PictureInPictureParams.Builder()
+            .setAspectRatio(android.util.Rational(16, 9))
+          if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            builder.setAutoEnterEnabled(true)
+            builder.setSeamlessResizeEnabled(true)
+          }
+          enterPictureInPictureMode(builder.build())
+        }
+      } catch (e: Exception) {
+        // Ignore if activity is not eligible or PiP not supported
+      }
+    }
+  }
+
+  override fun onPictureInPictureModeChanged(
+    isInPictureInPictureMode: Boolean,
+    newConfig: android.content.res.Configuration
+  ) {
+    super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+    LauncherIconModule.emitPipChange(isInPictureInPictureMode)
+  }
+
 `;
 
 const bootSplashInitialization = `val bootTheme = getBootTheme()
     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
       splashScreen.setSplashScreenTheme(bootTheme)
     }
-    RNBootSplash.init(this, bootTheme)`;
+    RNBootSplash.init(this, bootTheme)
+    currentMainActivity = this`;
 
 const withLauncherMainActivity = config =>
   withMainActivity(config, activityConfig => {
     let contents = activityConfig.modResults.contents;
     if (contents.includes('private fun getBootTheme()')) {
-      contents = contents.replace(/  private fun getBootTheme\(\): Int \{[\s\S]*?\r?\n  \}\r?\n(?:\r?\n)?/, bootThemeMethod);
+      contents = contents.replace(/  (?:companion object \{[\s\S]*?\}\r?\n\r?\n)?  fun updatePipParams[\s\S]*?private fun getBootTheme\(\): Int \{[\s\S]*?\r?\n  \}\r?\n(?:\r?\n)?/, pipAndThemeMethods);
+      if (!contents.includes('companion object')) {
+        contents = contents.replace(
+          /class MainActivity\s*:\s*ReactActivity\(\)\s*\{\n/,
+          match => `${match}${pipAndThemeMethods}`,
+        );
+      }
     } else {
       contents = contents.replace(
         /class MainActivity\s*:\s*ReactActivity\(\)\s*\{\n/,
-        match => `${match}${bootThemeMethod}`,
+        match => `${match}${pipAndThemeMethods}`,
       );
     }
     contents = contents.replace(
@@ -182,13 +255,15 @@ const writeLauncherResources = resRoot => {
   fs.mkdirSync(drawableV26, {recursive: true});
   for (const variant of variants) {
     const id = variant.id.toLowerCase();
+    const tintAttrs =
+      id === 'white'
+        ? ''
+        : `\n    android:tint="${variant.color}"\n    android:tintMode="src_in"`;
     fs.writeFileSync(
       path.join(drawable, `ic_launcher_foreground_${id}.xml`),
       `<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
     android:gravity="center"
-    android:src="@mipmap/ic_launcher_foreground"
-    android:tint="${variant.color}"
-    android:tintMode="src_in" />\n`,
+    android:src="@mipmap/ic_launcher_foreground"${tintAttrs} />\n`,
     );
     fs.writeFileSync(
       path.join(drawableV26, `ic_launcher_${id}.xml`),

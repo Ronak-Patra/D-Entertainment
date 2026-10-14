@@ -5,6 +5,8 @@ import {
   Image,
   Text,
   View,
+  Switch,
+  TouchableOpacity,
 } from 'react-native';
 import {TVFocusable} from '../../../components/tv';
 import type {ProviderExtension} from '../../../lib/storage/extensionStorage';
@@ -31,6 +33,8 @@ interface ProviderCardProps {
   hasUpdate: boolean;
   hasSettings?: boolean;
   primary: string;
+  isDisabled?: boolean;
+  onToggleDisable?: () => void;
   onActivate: () => void;
   onInstall: () => void;
   onUpdate: () => void;
@@ -50,6 +54,8 @@ const ProviderCard = ({
   hasUpdate,
   hasSettings,
   primary,
+  isDisabled,
+  onToggleDisable,
   onActivate,
   onInstall,
   onUpdate,
@@ -68,6 +74,7 @@ const ProviderCard = ({
         marginBottom: 12,
         overflow: 'hidden',
         backgroundColor: colors.surfaceContainerHigh,
+        opacity: isDisabled ? 0.65 : 1,
         borderColor: isCardFocused
           ? focusBorderColor
           : active && !isTV
@@ -141,6 +148,43 @@ const ProviderCard = ({
               }}>
               v{provider.version || 'Unknown'}
             </Text>
+            {isDisabled && (
+              <View
+                style={{
+                  backgroundColor: colors.surfaceContainerHighest,
+                  borderRadius: 6,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  marginLeft: 8,
+                }}>
+                <Text
+                  style={{
+                    color: colors.onSurfaceVariant,
+                    fontSize: 10,
+                    fontWeight: '700',
+                  }}>
+                  OFF
+                </Text>
+              </View>
+            )}
+            {installed && onToggleDisable && (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={onToggleDisable}
+                style={{marginLeft: 'auto', padding: 4}}>
+                <Switch
+                  value={!isDisabled}
+                  onValueChange={onToggleDisable}
+                  trackColor={{
+                    false: colors.surfaceContainerHighest,
+                    true: colors.primary,
+                  }}
+                  thumbColor={
+                    !isDisabled ? colors.onPrimary : colors.onSurfaceVariant
+                  }
+                />
+              </TouchableOpacity>
+            )}
           </View>
           <View style={{flexDirection: 'row', flexWrap: 'wrap', marginTop: 4}}>
             <MetadataChip icon="web" label={provider.type || 'Unknown'} />

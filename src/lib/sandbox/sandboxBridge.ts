@@ -28,6 +28,7 @@ interface PendingInvoke {
   timer: ReturnType<typeof setTimeout>;
   onAbort?: () => void;
   signal?: AbortSignal;
+  priority?: 'high' | 'normal';
 }
 
 const randomToken = (): string => {
@@ -40,7 +41,7 @@ const randomToken = (): string => {
 
 class SandboxBridge {
   private activeInvokes = 0;
-  private readonly maxActiveInvokes = 2;
+  private readonly maxActiveInvokes = 3;
   private injector: Injector | null = null;
   private ready = false;
   private readonly queue: HostMessage[] = [];
@@ -73,7 +74,18 @@ class SandboxBridge {
       message.type === 'invoke' ? this.pending.get(message.token) : undefined;
     if (message.type === 'invoke' && !invocation) return;
     if (invocation && this.activeInvokes >= this.maxActiveInvokes) {
-      this.queue.push(message);
+      if (invocation.priority === 'high') {
+        const firstNormalIndex = this.queue.findIndex(
+          m => m.type === 'invoke' && this.pending.get(m.token)?.priority !== 'high',
+        );
+        if (firstNormalIndex >= 0) {
+          this.queue.splice(firstNormalIndex, 0, message);
+        } else {
+          this.queue.push(message);
+        }
+      } else {
+        this.queue.push(message);
+      }
       return;
     }
     if (!this.injector || !this.ready) {
@@ -253,9 +265,18 @@ class SandboxBridge {
     args?: Record<string, unknown>;
     state: Record<string, unknown>;
     signal?: AbortSignal;
+    priority?: 'high' | 'normal';
   }): Promise<T> {
-    const {moduleCode, providerValue, author, exportName, args, state, signal} =
-      params;
+    const {
+      moduleCode,
+      providerValue,
+      author,
+      exportName,
+      args,
+      state,
+      signal,
+      priority = 'normal',
+    } = params;
 
     if (moduleCode.length > MAX_MODULE_SIZE) {
       return Promise.reject(new Error('Provider module is too large'));
@@ -293,6 +314,7 @@ class SandboxBridge {
         timer,
         onAbort,
         signal,
+        priority,
       });
 
       this.post({

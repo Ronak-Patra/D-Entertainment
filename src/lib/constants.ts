@@ -7,7 +7,7 @@ export const FLAGS = {
 
 export const themes: {name: string; color: string}[] = [
   {
-    name: 'Vega',
+    name: 'D Entertainment',
     color: '#FF6347',
   },
   {
@@ -43,9 +43,3 @@ export const themes: {name: string; color: string}[] = [
     color: '#FFFFFF',
   },
 ];
-
-export const socialLinks = {
-  github: 'https://github.com/vega-org/vega-app',
-  discord: 'https://discord.gg/cr42m6maWy',
-  sponsor: 'https://github.com/sponsors/Zenda-Cross',
-};

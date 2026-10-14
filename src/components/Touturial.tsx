@@ -1,3 +1,4 @@
+import {useInAppPlayerStore} from '../lib/zustand/inAppPlayerStore';
 import {View, Text, StatusBar, TouchableOpacity, UIManager, findNodeHandle} from 'react-native';
 import React from 'react';
 import {useState} from 'react';
@@ -23,11 +24,7 @@ const Tutorial = () => {
   const {provider: currentProvider, installedProviders} = useContentStore(
     state => state,
   );
-  const hasNoProvider =
-    !currentProvider ||
-    !currentProvider.value ||
-    !installedProviders ||
-    installedProviders.length === 0;
+  const hasNoProvider = !installedProviders || installedProviders.length === 0;
   const [showTutorial, setShowTutorial] = useState<boolean>(hasNoProvider);
   const installButtonRef = React.useRef<View>(null);
 
@@ -49,14 +46,12 @@ const Tutorial = () => {
 
   // Handle default provider setup
   React.useEffect(() => {
-    if (
-      !currentProvider ||
-      !currentProvider.value ||
-      !installedProviders ||
-      installedProviders.length === 0
-    ) {
+    if (!installedProviders || installedProviders.length === 0) {
       setShowTutorial(true);
     } else {
+      if (!currentProvider || !currentProvider.value) {
+        useContentStore.getState().setProvider(installedProviders[0]);
+      }
       setShowTutorial(false);
     }
   }, [installedProviders, currentProvider]);
@@ -107,7 +102,7 @@ const Tutorial = () => {
     }
 
     const video = result.assets[0];
-    navigation.navigate('Player', {
+    useInAppPlayerStore.getState().openPlayer( {
       linkIndex: 0,
       episodeList: [
         {

@@ -133,6 +133,7 @@ const ContinueWatching = () => {
           link: item.infoUrl,
           provider: item.providerValue,
           poster: item.poster || item.background,
+          title: item.title,
         });
       }
     },
