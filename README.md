@@ -1,101 +1,105 @@
-![vega-high-resolution-logo-transparent](https://github.com/Zenda-Cross/vega-app/assets/143804558/b2eb446f-8e7f-4800-81e1-3320c82f33de)
+# D Entertainment
 
-# Vega-App
-Android app for streaming and casting media.
-### Features
-- Stream and Download.
-- Cast support: Google Cast/DLNA with custom remuxer supports embedded audio and sub track change support.
-- WatchList.
-- External player and Downloader support.
-- Sync with desktop app
-- Create custom plugins.
-<br>
-
-[![Discord](https://custom-icon-badges.demolab.com/badge/-Join_Discord-6567a5?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/cr42m6maWy)
-
-___
-
-## Download ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/vega-org/vega-app/total?link=https%3A%2F%2Fgithub.com%2Fvega-org%2Fvega-app%2Freleases&label=Github%20Downloads)
-<!-- > <sub>Download Universal version if you are confused about armeabi-v7a or arm64-v8a or follow this guide https://vega.8man.in/guide/.</sub> -->
-
-<a href="https://play.google.com/store/apps/details?id=vega.app">
-  <img src="https://appure.io/badges/playstore/en.svg" width="200" alt="Get it on Google Play">
-</a>
-
-[![Download Apk](https://custom-icon-badges.demolab.com/badge/-Download_From_Github-black?style=for-the-badge&logo=download&logoColor=white)](https://github.com/vega-org/vega-app/releases/latest)
-
-[![Download Apk](https://custom-icon-badges.demolab.com/badge/-Website-tomato?style=for-the-badge&logo=download&logoColor=white)](https://vega.8man.in/#mobile)
-
-## Vega for Desktop 
-https://github.com/vega-org/vega-desktop
-
-
-<br>
-
-## Add or Create Provider source
-> [!TIP]
-> Follow the guide here https://vega.8man.in/guide/adding-providers
-
-##
-<!--  ![Screenshots](https://github.com/user-attachments/assets/b86af756-e66e-4ae7-b2af-61b25cfd8d4e) -->
-<img width="2712" height="1220" alt="Screenshot_2026-08-11-20-07-17-817_com vega" src="https://github.com/user-attachments/assets/e7de4085-fcb1-4504-92e3-a4f011adc879" />
-
-
-___
-
-## Stack
-<p align="left">
-     
-[![React-Native](https://custom-icon-badges.demolab.com/badge/-React_Native-287aad?style=for-the-badge&logo=react&logoColor=white)](https://reactnative.dev/)
-[![TypeScript](https://custom-icon-badges.demolab.com/badge/Typescript-3078C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![NativeWind](https://custom-icon-badges.demolab.com/badge/Native_Wind-0CA6E9?style=for-the-badge&logo=tailwind&logoColor=white)](https://www.nativewind.dev/)
-[![React-Navigation](https://custom-icon-badges.demolab.com/badge/React_Navigation-6838d9?style=for-the-badge&logo=menu&logoColor=white)](https://reactnavigation.org/)
-[![Expo-Modules](https://custom-icon-badges.demolab.com/badge/Expo_Modules-black?style=for-the-badge&logo=expo&logoColor=white)](https://docs.expo.dev/modules/overview/)
-[![React-Native-Video](https://custom-icon-badges.demolab.com/badge/React_native_video-38d9c9?style=for-the-badge&logo=video&logoColor=white)](https://thewidlarzgroup.github.io/react-native-video/)
-[![MMKV-Storage](https://custom-icon-badges.demolab.com/badge/MMKV_Storage-yellow?style=for-the-badge&logo=zap&logoColor=white)](https://github.com/mrousavy/react-native-mmkv)
-
-
-
+<p align="center">
+  <strong>Modern Android streaming and media player app for movies, series, anime, and Asian dramas.</strong>
 </p>
 
-## Build and Dev
-0. Set-up React Native environment if you haven't already. [Guide](https://reactnative.dev/docs/set-up-your-environment)
-
-1. clone
-     ```bash
-     git clone https://github.com/vega-org/vega-app.git
-     ```
-     ```
-     cd vega-app
-     ```
-2. Install
-     ```
-     npm install
-     ```
-3. Prebuild
-   ```
-    npx expo prebuild -p android --clean
-   ```
-5. Open metro dev server
-Dev
-     ```
-     npm run android
-     ```
-Build apk/aab
-https://reactnative.dev/docs/signed-apk-android
+<p align="center">
+  <a href="https://github.com/Ronak-Patra/D-Entertainment"><img src="https://img.shields.io/badge/Platform-Android-green.svg?style=for-the-badge&logo=android" alt="Platform"></a>
+  <a href="https://reactnative.dev/"><img src="https://custom-icon-badges.demolab.com/badge/-React_Native-287aad?style=for-the-badge&logo=react&logoColor=white" alt="React Native"></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://custom-icon-badges.demolab.com/badge/Typescript-3078C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript"></a>
+  <a href="https://docs.expo.dev/"><img src="https://custom-icon-badges.demolab.com/badge/Expo-black?style=for-the-badge&logo=expo&logoColor=white" alt="Expo"></a>
+</p>
 
 ---
+
+## 🌟 Key Features
+
+- **Multi-Provider Media Streaming**: Aggregate and stream movies, web series, and TV shows from multiple community providers.
+- **Dedicated Anime & K-Drama Hubs**: Smart categorization tabs covering **Anime**, **K-Drama**, **Trending & New Releases**, **Bollywood**, **South Indian**, **Hollywood**, and **OTT Series**.
+- **YouTube/Netflix-Style Half-Vertical Player**:
+  - Top 16:9 video player with smooth pinch-to-zoom and gestures.
+  - Bottom scrollable recommendations shelf, episode selectors, and Material 3 quick action pills.
+  - One-tap switch between Half-Vertical (Portrait) and Fullscreen (Landscape).
+- **Dual Picture-in-Picture (PiP) Modes**:
+  - **In-App Floating PiP**: Draggable, resizable floating mini-player with clean, minimal controls (Play/Pause, Fullscreen, and Close).
+  - **Android System PiP**: Smooth OS-level Picture-in-Picture triggered on swipe-to-home or navigation button press.
+- **Smart Orientation Control**:
+  - Dedicated orientation switch and orientation lock toggle directly inside the player overlay.
+- **Dynamic Intro/Outro Skip**:
+  - Skip buttons automatically detect intro/outro segments per title with configurable custom skip durations.
+- **Casting & Audio/Subtitle Selection**:
+  - Google Cast and DLNA with real-time remuxing, embedded audio track switching, and subtitle selection.
+- **Network Resilience & Privacy**:
+  - Built-in DNS-over-HTTPS (DoH), Cloudflare WARP, and ByeDPI support for circumvention and smooth playback behind ISP blocks.
+- **Downloads & Offline Playback**:
+  - Fast multithreaded HLS downloader and torrent streaming support.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Framework**: [React Native](https://reactnative.dev/) (New Architecture ready) & [Expo Modules](https://docs.expo.dev/)
+- **Language**: [TypeScript](https://www.typescriptlang.org/) & [Kotlin](https://kotlinlang.org/)
+- **Video Engine**: [react-native-video](https://github.com/react-native-video/react-native-video) (ExoPlayer)
+- **State Management**: [Zustand](https://github.com/pmndrs/zustand) & [MMKV Storage](https://github.com/mrousavy/react-native-mmkv)
+- **Styling**: [NativeWind](https://www.nativewind.dev/) (Tailwind CSS for React Native)
+- **Navigation**: [React Navigation](https://reactnavigation.org/)
+
+---
+
+## 🚀 Getting Started & Building from Source
+
+### Prerequisites
+1. Set up your React Native development environment following the [Official React Native Environment Setup Guide](https://reactnative.dev/docs/set-up-your-environment) (JDK 17+, Android SDK, and Android Studio).
+2. Install Node.js (v18 or higher).
+
+### Installation & Development
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/Ronak-Patra/D-Entertainment.git
+   cd D-Entertainment
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+3. **Generate Android native project (Prebuild)**:
+   ```bash
+   npx expo prebuild -p android --clean
+   ```
+
+4. **Run on an Android device or emulator**:
+   ```bash
+   npm run android
+   ```
+
+### Building Release APKs
+
+To build optimized release APKs:
+```bash
+cd android
+./gradlew assembleRelease
+```
+The output APKs will be located at:
+- `android/app/build/outputs/apk/release/d-entertainment-arm64-v8a-v1.0.0.apk`
+- `android/app/build/outputs/apk/release/d-entertainment-armeabi-v7a-v1.0.0.apk`
+
+---
+
+## 💖 Acknowledgements & Credits
+
+**D Entertainment** is built upon and proudly forked from the open-source **[Vega App](https://github.com/vega-org/vega-app)** developed by the [Vega Organization](https://github.com/vega-org).
+
+Heartfelt gratitude and full credit go to the original creators, maintainers, and contributors of the Vega App for creating the exceptional architectural foundation, provider plugin system, casting remuxer, and media playback infrastructure.
+
+---
+
+## ⚖️ Disclaimer
+
 > [!IMPORTANT]
-> Vega App does not host, store, or provide any media content. It is not affiliated with or connected to any external providers or extensions. All content accessed through the app is managed and sourced directly by the user via third-party tools or integrations. Vega App has no control over it.
-
-
-## Leave a star if this was helpful
-
-<a href="https://www.star-history.com/?repos=vega-org%2Fvega-app&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=vega-org/vega-app&type=date&theme=dark&legend=top-left&sealed_token=ajfKjwdP9VUHI3OOuOW40FrTlJWZRFXQqjUVf51d1HcT6QFCcR2mvv8ykA_FM5u7a9rqhzNtERwdQjth0A63L5tRJ6ImisXf5ktSU4eYU-SB1m3-xp5HOQ" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=vega-org/vega-app&type=date&legend=top-left&sealed_token=ajfKjwdP9VUHI3OOuOW40FrTlJWZRFXQqjUVf51d1HcT6QFCcR2mvv8ykA_FM5u7a9rqhzNtERwdQjth0A63L5tRJ6ImisXf5ktSU4eYU-SB1m3-xp5HOQ" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=vega-org/vega-app&type=date&legend=top-left&sealed_token=ajfKjwdP9VUHI3OOuOW40FrTlJWZRFXQqjUVf51d1HcT6QFCcR2mvv8ykA_FM5u7a9rqhzNtERwdQjth0A63L5tRJ6ImisXf5ktSU4eYU-SB1m3-xp5HOQ" />
- </picture>
-</a>
-
+> **D Entertainment does not host, store, or distribute any media content or video files.**
+> This application functions strictly as a media player and aggregator frontend. All streams and metadata are provided by third-party extensions and community-maintained sources selected and configured directly by the user. The developers do not endorse and have no affiliation with any third-party content providers.
