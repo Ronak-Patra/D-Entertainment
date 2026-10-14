@@ -1,6 +1,7 @@
 import {usePlayerControlAnimations} from '../../components/media-console/hooks/usePlayerControlAnimations';
 import {isRemotePlaybackCanceled} from '../../lib/remote/remotePlaybackErrors';
 import { useInAppPlayerStore } from '../../lib/zustand/inAppPlayerStore';
+import { triggerGlobalPip, checkPipPermission, openPipSettings } from '../../lib/launcherIcon';
 import React, {useEffect, useState, useRef, useCallback, useMemo} from 'react';
 import {
   Animated as NativeAnimated,
@@ -624,6 +625,23 @@ const Player = (): React.JSX.Element => {
     };
   }, []);
 
+  const [showPipChoiceModal, setShowPipChoiceModal] = useState(false);
+  const [hasSystemPipPermission, setHasSystemPipPermission] = useState(true);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      NativeModules.LauncherIconModule?.setPipPlaybackActive(true);
+      checkPipPermission().then(granted => {
+        setHasSystemPipPermission(granted);
+      });
+    }
+    return () => {
+      if (Platform.OS === 'android') {
+        NativeModules.LauncherIconModule?.setPipPlaybackActive(false);
+      }
+    };
+  }, []);
+
   const colors = useM3Colors();
   const primary = colors.primary;
   const dynamicInfoAccentEnabled = settingsStorage.isDynamicInfoAccentEnabled();
@@ -735,6 +753,28 @@ const Player = (): React.JSX.Element => {
     handleLockedScreenTap,
     unlockButtonTimerRef,
   } = usePlayerSettings();
+
+  const handleOpenSystemPip = useCallback(async () => {
+    setShowPipChoiceModal(false);
+    if (Platform.OS === 'android') {
+      const permitted = await checkPipPermission();
+      if (!permitted) {
+        setToast('PiP permission disabled. Opening settings...', 2500);
+        await openPipSettings();
+        return;
+      }
+      const success = await triggerGlobalPip();
+      if (!success) {
+        setToast('Could not start system PiP. Falling back to mini player.', 2000);
+        setPip(true);
+      }
+    }
+  }, [setPip, setToast]);
+
+  const handleOpenInAppPip = useCallback(() => {
+    setShowPipChoiceModal(false);
+    setPip(true);
+  }, [setPip]);
 
   const {width: windowWidth} = useWindowDimensions();
   const [playerOrientation, setPlayerOrientation] = useState<'PORTRAIT' | 'LANDSCAPE'>(
@@ -3937,12 +3977,7 @@ const Player = (): React.JSX.Element => {
                 <TouchableOpacity
                   style={LANDSCAPE_PILL_STYLE}
                   onPress={() => {
-                    setPip(true);
-                  }}
-                  onLongPress={() => {
-                    if (Platform.OS === 'android') {
-                      NativeModules.LauncherIconModule?.enterGlobalPip?.();
-                    }
+                    setShowPipChoiceModal(true);
                   }}>
                   <MaterialCommunityIcons
                     name="picture-in-picture-bottom-right-outline"
@@ -4226,6 +4261,122 @@ const Player = (): React.JSX.Element => {
         </Modal>
       )}
 
+      {/* PiP Mode Selector Modal */}
+      {showPipChoiceModal && !isInAnyPip && (
+        <Modal
+          transparent
+          animationType="fade"
+          visible={showPipChoiceModal}
+          onRequestClose={() => setShowPipChoiceModal(false)}>
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+            onPress={() => setShowPipChoiceModal(false)}>
+            <Pressable
+              style={{
+                width: 320,
+                backgroundColor: '#1E1E1E',
+                borderRadius: 20,
+                padding: 20,
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.12)',
+              }}
+              onPress={e => e.stopPropagation()}>
+              <Text
+                style={{
+                  color: '#FFF',
+                  fontSize: 17,
+                  fontWeight: '700',
+                  marginBottom: 6,
+                }}>
+                Picture-in-Picture
+              </Text>
+              <Text
+                style={{
+                  color: 'rgba(255,255,255,0.7)',
+                  fontSize: 13,
+                  marginBottom: 16,
+                }}>
+                Choose your multitasking playback mode:
+              </Text>
+
+              {/* Option 1: Global / System PiP */}
+              <TouchableOpacity
+                style={{
+                  paddingVertical: 12,
+                  paddingHorizontal: 14,
+                  borderRadius: 12,
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  marginBottom: 10,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+                onPress={handleOpenSystemPip}>
+                <MaterialCommunityIcons name="picture-in-picture-top-right" size={24} color="#FFF" />
+                <View style={{flex: 1}}>
+                  <Text style={{color: '#FFF', fontWeight: '700', fontSize: 14}}>System PiP (Global)</Text>
+                  <Text style={{color: 'rgba(255,255,255,0.6)', fontSize: 12}}>
+                    Floats over Home screen and other apps
+                  </Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={20} color="#AAA" />
+              </TouchableOpacity>
+
+              {/* Option 2: In-App Mini Player */}
+              <TouchableOpacity
+                style={{
+                  paddingVertical: 12,
+                  paddingHorizontal: 14,
+                  borderRadius: 12,
+                  backgroundColor: 'rgba(255,255,255,0.06)',
+                  marginBottom: 10,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+                onPress={handleOpenInAppPip}>
+                <MaterialIcons name="branding-watermark" size={22} color="#FFF" />
+                <View style={{flex: 1}}>
+                  <Text style={{color: '#FFF', fontWeight: '700', fontSize: 14}}>In-App Mini Player</Text>
+                  <Text style={{color: 'rgba(255,255,255,0.6)', fontSize: 12}}>
+                    Draggable mini-player inside D Entertainment
+                  </Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={20} color="#AAA" />
+              </TouchableOpacity>
+
+              {!hasSystemPipPermission && Platform.OS === 'android' && (
+                <TouchableOpacity
+                  style={{
+                    paddingVertical: 10,
+                    paddingHorizontal: 14,
+                    borderRadius: 12,
+                    backgroundColor: 'rgba(255,165,0,0.15)',
+                    marginTop: 6,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                  onPress={() => {
+                    setShowPipChoiceModal(false);
+                    openPipSettings();
+                  }}>
+                  <MaterialIcons name="settings" size={18} color="#FFA500" />
+                  <Text style={{color: '#FFA500', fontWeight: '600', fontSize: 12, flex: 1}}>
+                    Grant Android PiP permission in Settings
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
       {autoNextVisible && !isCasting && !streamLoading && !isInAnyPip && (
         <View style={{position: 'absolute', bottom: isHalfVertical ? 14 : 95, right: 28, zIndex: 70}}>
           <AutoNextOverlay
@@ -4338,12 +4489,7 @@ const Player = (): React.JSX.Element => {
 
             {/* PIP */}
             <Pressable
-              onPress={() => setPip(true)}
-              onLongPress={() => {
-                if (Platform.OS === 'android') {
-                  NativeModules.LauncherIconModule?.enterGlobalPip?.();
-                }
-              }}
+              onPress={() => setShowPipChoiceModal(true)}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',

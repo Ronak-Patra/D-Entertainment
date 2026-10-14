@@ -91,6 +91,8 @@ const withLauncherManifest = config =>
       removeLauncherIntent(mainActivity);
       delete mainActivity.$['android:banner'];
       mainActivity.$['android:theme'] = '@style/BootTheme';
+      mainActivity.$['android:supportsPictureInPicture'] = 'true';
+      mainActivity.$['android:resizeableActivity'] = 'true';
     }
     // The install-time entry is a separate white alias. Every selectable color,
     // white included, starts disabled so switching always enables a component
@@ -138,16 +140,28 @@ const pipAndThemeMethods = `  companion object {
   fun updatePipParams(active: Boolean) {
     isVideoPlaying = active
     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-      try {
-        val builder = android.app.PictureInPictureParams.Builder()
-          .setAspectRatio(android.util.Rational(16, 9))
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-          builder.setAutoEnterEnabled(active)
-          builder.setSeamlessResizeEnabled(true)
+      runOnUiThread {
+        try {
+          val builder = android.app.PictureInPictureParams.Builder()
+            .setAspectRatio(android.util.Rational(16, 9))
+          val metrics = resources.displayMetrics
+          val width = metrics.widthPixels
+          val height = metrics.heightPixels
+          val isPortrait = height > width
+          if (isPortrait) {
+            val videoHeight = (width * 9) / 16
+            builder.setSourceRectHint(android.graphics.Rect(0, 0, width, videoHeight))
+          } else {
+            builder.setSourceRectHint(android.graphics.Rect(0, 0, width, height))
+          }
+          if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            builder.setAutoEnterEnabled(active)
+            builder.setSeamlessResizeEnabled(true)
+          }
+          setPictureInPictureParams(builder.build())
+        } catch (e: Exception) {
+          android.util.Log.e("MainActivity", "Failed to setPictureInPictureParams", e)
         }
-        setPictureInPictureParams(builder.build())
-      } catch (e: Exception) {
-        // Ignore if activity is not eligible or PiP not supported
       }
     }
   }
@@ -169,6 +183,14 @@ const pipAndThemeMethods = `  companion object {
       "blue" -> R.style.BootTheme_Blue
       "lavender" -> R.style.BootTheme_Lavender
       else -> R.style.BootTheme_White
+    }
+  }
+
+  override fun onStart() {
+    super.onStart()
+    currentMainActivity = this
+    if (isVideoPlaying) {
+      updatePipParams(true)
     }
   }
 
@@ -194,14 +216,25 @@ const pipAndThemeMethods = `  companion object {
         if (!isInPictureInPictureMode) {
           val builder = android.app.PictureInPictureParams.Builder()
             .setAspectRatio(android.util.Rational(16, 9))
+          val metrics = resources.displayMetrics
+          val width = metrics.widthPixels
+          val height = metrics.heightPixels
+          val isPortrait = height > width
+          if (isPortrait) {
+            val videoHeight = (width * 9) / 16
+            builder.setSourceRectHint(android.graphics.Rect(0, 0, width, videoHeight))
+          } else {
+            builder.setSourceRectHint(android.graphics.Rect(0, 0, width, height))
+          }
           if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             builder.setAutoEnterEnabled(true)
             builder.setSeamlessResizeEnabled(true)
           }
-          enterPictureInPictureMode(builder.build())
+          val entered = enterPictureInPictureMode(builder.build())
+          android.util.Log.d("MainActivity", "onUserLeaveHint enterPictureInPictureMode: $entered")
         }
       } catch (e: Exception) {
-        // Ignore if activity is not eligible or PiP not supported
+        android.util.Log.e("MainActivity", "Error in onUserLeaveHint", e)
       }
     }
   }

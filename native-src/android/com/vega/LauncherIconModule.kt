@@ -66,14 +66,15 @@ class LauncherIconModule(reactContext: ReactApplicationContext) : ReactContextBa
     fun setPipPlaybackActive(active: Boolean) {
         MainActivity.isVideoPlaying = active
         com.facebook.react.bridge.UiThreadUtil.runOnUiThread {
-            MainActivity.currentMainActivity?.updatePipParams(active)
+            val act = (reactApplicationContext.currentActivity as? MainActivity) ?: MainActivity.currentMainActivity
+            act?.updatePipParams(active)
         }
     }
 
     @ReactMethod
     fun enterGlobalPip(promise: Promise) {
         com.facebook.react.bridge.UiThreadUtil.runOnUiThread {
-            val activity = reactApplicationContext.currentActivity ?: MainActivity.currentMainActivity
+            val activity = (reactApplicationContext.currentActivity as? MainActivity) ?: MainActivity.currentMainActivity
             if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (activity.isInPictureInPictureMode) {
                     promise.resolve(true)
@@ -83,6 +84,16 @@ class LauncherIconModule(reactContext: ReactApplicationContext) : ReactContextBa
                 try {
                     val builder = android.app.PictureInPictureParams.Builder()
                         .setAspectRatio(android.util.Rational(16, 9))
+                    val metrics = activity.resources.displayMetrics
+                    val width = metrics.widthPixels
+                    val height = metrics.heightPixels
+                    val isPortrait = height > width
+                    if (isPortrait) {
+                        val videoHeight = (width * 9) / 16
+                        builder.setSourceRectHint(android.graphics.Rect(0, 0, width, videoHeight))
+                    } else {
+                        builder.setSourceRectHint(android.graphics.Rect(0, 0, width, height))
+                    }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         builder.setAutoEnterEnabled(true)
                         builder.setSeamlessResizeEnabled(true)
@@ -95,6 +106,55 @@ class LauncherIconModule(reactContext: ReactApplicationContext) : ReactContextBa
             } else {
                 promise.resolve(false)
             }
+        }
+    }
+
+    @ReactMethod
+    fun checkPipPermission(promise: Promise) {
+        val context = reactApplicationContext
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            promise.resolve(false)
+            return
+        }
+        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? android.app.AppOpsManager
+        if (appOps == null) {
+            promise.resolve(true)
+            return
+        }
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appOps.unsafeCheckOpNoThrow(
+                android.app.AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
+                android.os.Process.myUid(),
+                context.packageName
+            )
+        } else {
+            appOps.checkOpNoThrow(
+                android.app.AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
+                android.os.Process.myUid(),
+                context.packageName
+            )
+        }
+        promise.resolve(mode == android.app.AppOpsManager.MODE_ALLOWED)
+    }
+
+    @ReactMethod
+    fun openPipSettings(promise: Promise) {
+        try {
+            val activity = reactApplicationContext.currentActivity ?: MainActivity.currentMainActivity
+            if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val intent = android.content.Intent(
+                    "android.settings.PICTURE_IN_PICTURE_SETTINGS",
+                    android.net.Uri.parse("package:" + activity.packageName)
+                ).apply {
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                activity.startActivity(intent)
+                promise.resolve(true)
+            } else {
+                promise.resolve(false)
+            }
+        } catch (e: Exception) {
+            promise.reject("SETTINGS_ERROR", e.message)
         }
     }
 
