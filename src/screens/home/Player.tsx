@@ -48,6 +48,7 @@ import Orientation, {
   UNLOCK,
 } from 'react-native-orientation-locker';
 import {SystemBars} from 'react-native-edge-to-edge';
+import * as Brightness from 'expo-brightness';
 import VideoPlayer from '../../components/media-console';
 import {resetVolumeBoost} from '../../lib/services/volumeBooster';
 import {playPauseRef} from '../../components/media-console/components/PlayPause/PlayPause';
@@ -630,7 +631,6 @@ const Player = (): React.JSX.Element => {
 
   useEffect(() => {
     if (Platform.OS === 'android') {
-      NativeModules.LauncherIconModule?.setPipPlaybackActive(true);
       checkPipPermission().then(granted => {
         setHasSystemPipPermission(granted);
       });
@@ -1317,11 +1317,14 @@ const Player = (): React.JSX.Element => {
     } else {
       playerRef.current?.resume();
     }
-    const targetPlaying = !isPaused;
+    const targetPlaying = !isPaused && !streamLoading;
     if (useInAppPlayerStore.getState().isPlaying !== targetPlaying) {
       useInAppPlayerStore.getState().setPlaying(targetPlaying);
     }
-  }, [isPaused]);
+    if (Platform.OS === 'android') {
+      NativeModules.LauncherIconModule?.setPipPlaybackActive(targetPlaying);
+    }
+  }, [isPaused, streamLoading]);
 
   const handleSeekNotification = useCallback(
     (text: string) => setToast(text, 1500),
@@ -1574,6 +1577,29 @@ const Player = (): React.JSX.Element => {
     syncedPosition,
   ]);
 
+  const [showResumeChoiceModal, setShowResumeChoiceModal] = useState(false);
+  const [resumeTargetPosition, setResumeTargetPosition] = useState<number>(0);
+  const hasPromptedResumeRef = useRef(false);
+
+  const handleResumePlayback = useCallback(() => {
+    setShowResumeChoiceModal(false);
+    resumeAppliedRef.current = true;
+    if (resumeTargetPosition > 0) {
+      playerRef.current?.seek(resumeTargetPosition);
+    }
+    setIsPaused(false);
+    playerRef.current?.resume();
+  }, [resumeTargetPosition]);
+
+  const handlePlayFromStart = useCallback(() => {
+    setShowResumeChoiceModal(false);
+    resumeAppliedRef.current = true;
+    videoPositionRef.current.position = 0;
+    playerRef.current?.seek(0);
+    setIsPaused(false);
+    playerRef.current?.resume();
+  }, [videoPositionRef]);
+
   useEffect(() => {
     hasSetInitialAudioRef.current = false;
     hasSetInitialTextRef.current = false;
@@ -1581,6 +1607,9 @@ const Player = (): React.JSX.Element => {
     videoLoadedRef.current = false;
     appliedPersistedLocalVideoRef.current = false;
     remoteCastPositionRef.current = 0;
+    hasPromptedResumeRef.current = false;
+    setShowResumeChoiceModal(false);
+    setResumeTargetPosition(0);
   }, [activeEpisode?.id, activeEpisode?.link, activeEpisode?.sourceLink]);
 
   // Auto-resume a remembered local video file for this episode (e.g. when
@@ -1608,9 +1637,17 @@ const Player = (): React.JSX.Element => {
     if (
       videoLoadedRef.current &&
       !resumeAppliedRef.current &&
-      watchedDuration > 5 &&
+      watchedDuration > 10 &&
       videoPositionRef.current.position < 5
     ) {
+      if (!hasPromptedResumeRef.current) {
+        hasPromptedResumeRef.current = true;
+        setResumeTargetPosition(watchedDuration);
+        setShowResumeChoiceModal(true);
+        setIsPaused(true);
+        playerRef.current?.pause();
+        return;
+      }
       playerRef.current?.seek(watchedDuration);
       resumeAppliedRef.current = true;
     }
@@ -2895,11 +2932,28 @@ const Player = (): React.JSX.Element => {
   useEffect(() => {
     return () => {
       resetVolumeBoost();
+      Brightness.restoreSystemBrightnessAsync().catch(() => {});
+      if (!Platform.isTV) {
+        Orientation.lockToPortrait();
+      }
       if (unlockButtonTimerRef.current) {
         clearTimeout(unlockButtonTimerRef.current);
       }
     };
   }, [unlockButtonTimerRef]);
+
+  // Enforce portrait when backgrounded while paused or stopped
+  useEffect(() => {
+    if (Platform.isTV) return;
+    const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (nextState !== 'active') {
+        if (isPaused || isPip) {
+          Orientation.lockToPortrait();
+        }
+      }
+    });
+    return () => sub.remove();
+  }, [isPaused, isPip]);
 
   // Animation effects
   useEffect(() => {
@@ -3091,7 +3145,18 @@ const Player = (): React.JSX.Element => {
       markStreamLoaded();
       // A source opened at its start position is already there.
       const loadedAt = Number(e?.currentTime) || 0;
-      if (wd > 5 && Math.abs(loadedAt - wd) > 2) {
+      if (wd > 10 && Math.abs(loadedAt - wd) > 2) {
+        if (!hasPromptedResumeRef.current) {
+          hasPromptedResumeRef.current = true;
+          setResumeTargetPosition(wd);
+          setShowResumeChoiceModal(true);
+          setIsPaused(true);
+          playerRef?.current?.pause();
+          return;
+        }
+        playerRef.current?.seek(wd);
+        resumeAppliedRef.current = true;
+      } else if (wd > 5 && Math.abs(loadedAt - wd) > 2) {
         playerRef.current?.seek(wd);
         resumeAppliedRef.current = true;
       }
@@ -3806,34 +3871,21 @@ const Player = (): React.JSX.Element => {
             </TouchableOpacity>
           )}
           {!isPlayerLocked && !Platform.isTV && (
-            <>
-              <TouchableOpacity
-                onPress={toggleOrientation}
-                accessibilityRole="button"
-                accessibilityLabel={isLandscape ? 'Switch to Portrait' : 'Switch to Landscape'}
-                className="opacity-70 p-2 rounded-full">
-                <MaterialIcons
-                  name="screen-rotation"
-                  color={BOTTOM_CONTROL_ICON_COLOR}
-                  size={24}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={toggleOrientationLock}
-                accessibilityRole="button"
-                accessibilityLabel={isOrientationLocked ? 'Unlock orientation' : 'Lock orientation'}
-                style={{
-                  padding: 8,
-                  borderRadius: 9999,
-                  backgroundColor: isOrientationLocked ? 'rgba(255, 255, 255, 0.18)' : 'transparent',
-                }}>
-                <MaterialIcons
-                  name={isOrientationLocked ? 'screen-lock-rotation' : 'screen-rotation'}
-                  color={isOrientationLocked ? '#4ade80' : BOTTOM_CONTROL_ICON_COLOR}
-                  size={24}
-                />
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity
+              onPress={toggleOrientationLock}
+              accessibilityRole="button"
+              accessibilityLabel={isOrientationLocked ? 'Unlock orientation (Auto)' : 'Lock orientation'}
+              style={{
+                padding: 8,
+                borderRadius: 9999,
+                backgroundColor: isOrientationLocked ? 'rgba(74, 222, 128, 0.25)' : 'transparent',
+              }}>
+              <MaterialIcons
+                name={isOrientationLocked ? 'screen-lock-rotation' : 'screen-rotation'}
+                color={isOrientationLocked ? '#4ade80' : BOTTOM_CONTROL_ICON_COLOR}
+                size={24}
+              />
+            </TouchableOpacity>
           )}
         </LockAnimatedView>
       )}
@@ -4039,24 +4091,6 @@ const Player = (): React.JSX.Element => {
                         : 'Contain'}
                 </Text>
               </BottomControlButton>
-
-              {/* Rotate button */}
-              {!Platform.isTV && (
-                <BottomControlButton
-                  style={LANDSCAPE_PILL_STYLE}
-                  onPress={toggleOrientation}>
-                  <MaterialIcons
-                    name="screen-rotation"
-                    size={18}
-                    color={BOTTOM_CONTROL_ICON_COLOR}
-                  />
-                  <Text
-                    className="text-white text-xs font-medium min-w-[38px]"
-                    numberOfLines={1}>
-                    Portrait
-                  </Text>
-                </BottomControlButton>
-              )}
 
               {/* Orientation Lock button */}
               {!Platform.isTV && (
@@ -4372,6 +4406,128 @@ const Player = (): React.JSX.Element => {
                   </Text>
                 </TouchableOpacity>
               )}
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* Resume Playback or Play From Start Modal */}
+      {showResumeChoiceModal && !isInAnyPip && (
+        <Modal
+          transparent
+          animationType="fade"
+          visible={showResumeChoiceModal}
+          onRequestClose={handleResumePlayback}>
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: 'rgba(0,0,0,0.75)',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+            onPress={handleResumePlayback}>
+            <Pressable
+              style={{
+                width: 320,
+                backgroundColor: '#1E1E1E',
+                borderRadius: 20,
+                padding: 22,
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.12)',
+                alignItems: 'center',
+              }}
+              onPress={e => e.stopPropagation()}>
+              <View
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 26,
+                  backgroundColor: 'rgba(255,255,255,0.08)',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginBottom: 14,
+                }}>
+                <MaterialIcons name="history" size={28} color={primary} />
+              </View>
+
+              <Text
+                style={{
+                  color: '#FFF',
+                  fontSize: 18,
+                  fontWeight: '700',
+                  marginBottom: 6,
+                  textAlign: 'center',
+                }}>
+                Resume Video
+              </Text>
+              <Text
+                style={{
+                  color: 'rgba(255,255,255,0.7)',
+                  fontSize: 13,
+                  marginBottom: 20,
+                  textAlign: 'center',
+                }}>
+                You were watching at{' '}
+                <Text style={{color: '#FFF', fontWeight: '700'}}>
+                  {formatTVTimelineTime(resumeTargetPosition)}
+                </Text>
+              </Text>
+
+              {/* Resume Button */}
+              <TouchableOpacity
+                hasTVPreferredFocus={Platform.isTV}
+                style={{
+                  width: '100%',
+                  paddingVertical: 13,
+                  paddingHorizontal: 16,
+                  borderRadius: 14,
+                  backgroundColor: primary,
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 10,
+                }}
+                onPress={handleResumePlayback}>
+                <MaterialIcons name="play-arrow" size={20} color="#FFFFFF" />
+                <Text
+                  style={{
+                    color: '#FFFFFF',
+                    fontSize: 15,
+                    fontWeight: '700',
+                  }}>
+                  Resume ({formatTVTimelineTime(resumeTargetPosition)})
+                </Text>
+              </TouchableOpacity>
+
+              {/* Play From Start Button */}
+              <TouchableOpacity
+                style={{
+                  width: '100%',
+                  paddingVertical: 13,
+                  paddingHorizontal: 16,
+                  borderRadius: 14,
+                  backgroundColor: 'rgba(255,255,255,0.08)',
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+                onPress={handlePlayFromStart}>
+                <MaterialIcons
+                  name="replay"
+                  size={18}
+                  color="rgba(255,255,255,0.85)"
+                />
+                <Text
+                  style={{
+                    color: 'rgba(255,255,255,0.85)',
+                    fontSize: 15,
+                    fontWeight: '600',
+                  }}>
+                  Play from start
+                </Text>
+              </TouchableOpacity>
             </Pressable>
           </Pressable>
         </Modal>

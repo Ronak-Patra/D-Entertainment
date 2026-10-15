@@ -46,7 +46,12 @@ const GlobalPlayerWrapper = () => {
   }, [isPip, insets.bottom, pipScale, baseScale, translateX, translateY]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      if (!isTV) {
+        Orientation.lockToPortrait();
+      }
+      return;
+    }
     const backAction = () => {
       if (isPip) {
         closePlayer();

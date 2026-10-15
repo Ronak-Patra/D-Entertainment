@@ -1,5 +1,6 @@
 import {create} from 'zustand';
 import {NativeModules, Platform} from 'react-native';
+import Orientation from 'react-native-orientation-locker';
 import {EpisodeLink} from '../providers/types';
 
 const syncNativePipPlayback = (active: boolean) => {
@@ -53,15 +54,20 @@ export const useInAppPlayerStore = create<InAppPlayerState>((set, get) => ({
   },
   closePlayer: () => {
     syncNativePipPlayback(false);
+    if (!Platform.isTV) {
+      try {
+        Orientation.lockToPortrait();
+      } catch {}
+    }
     set({isOpen: false, isPip: false, isGlobalPip: false, isPlaying: false, params: null, togglePlayback: undefined});
   },
   setPip: (isPip) => {
-    syncNativePipPlayback(get().isOpen);
+    syncNativePipPlayback(get().isOpen && get().isPlaying);
     set({isPip});
   },
   setGlobalPip: (isGlobalPip) => set({isGlobalPip}),
   setPlaying: (isPlaying) => {
-    syncNativePipPlayback(get().isOpen);
+    syncNativePipPlayback(isPlaying && get().isOpen);
     set({isPlaying});
   },
 }));

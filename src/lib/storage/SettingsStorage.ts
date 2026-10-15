@@ -41,6 +41,7 @@ export enum SettingsKeys {
   BACK_BUFFER_MB = 'backBufferMB',
   SEEK_INTERVAL = 'seekInterval',
   PLAYBACK_SPEED = 'playbackSpeed',
+  PLAYER_BRIGHTNESS = 'playerBrightness',
 
   // Quality settings
   EXCLUDED_QUALITIES = 'excludedQualities',
@@ -461,6 +462,23 @@ export class SettingsStorage {
       SettingsKeys.BACK_BUFFER_MB,
       clampBufferMB(mb, 0, BUFFER_LIMITS.backMax, DEFAULT_BACK_BUFFER_MB),
     );
+  }
+
+  getPlayerBrightness(): number | null {
+    const val = mainStorage.getNumber(SettingsKeys.PLAYER_BRIGHTNESS);
+    if (typeof val === 'number' && Number.isFinite(val) && val >= 0 && val <= 1) {
+      return val;
+    }
+    return null;
+  }
+
+  setPlayerBrightness(brightness: number): void {
+    if (Number.isFinite(brightness)) {
+      mainStorage.setNumber(
+        SettingsKeys.PLAYER_BRIGHTNESS,
+        Math.max(0, Math.min(1, brightness)),
+      );
+    }
   }
 
   getPlaybackSpeed(): number {

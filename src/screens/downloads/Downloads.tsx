@@ -9,6 +9,7 @@ import {
   Dimensions,
   FlatList,
   findNodeHandle,
+  ScrollView,
   View,
 } from 'react-native';
 import ReactNativeHapticFeedback, {
@@ -390,11 +391,24 @@ const Downloads = () => {
                   paddingRight: isTV ? 48 : 6,
                 }}>
                 <AppText
-                  role="headlineLargeEmphasized"
+                  role={isTV ? 'headlineLargeEmphasized' : 'headlineMediumEmphasized'}
+                  numberOfLines={1}
+                  style={{flexShrink: 0}}
                   className="text-m3-on-background">
                   Downloads
                 </AppText>
-                <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+                <ScrollView
+                  horizontal
+                  nestedScrollEnabled
+                  showsHorizontalScrollIndicator={false}
+                  style={{flexShrink: 1, marginLeft: 8}}
+                  contentContainerStyle={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                    justifyContent: 'flex-end',
+                    flexGrow: 1,
+                  }}>
                   <TVFocusable
                     accessibilityRole="button"
                     accessibilityLabel="Play Local Video"
@@ -420,7 +434,7 @@ const Downloads = () => {
                     <AppText
                       role="labelLargeEmphasized"
                       style={{color: colors.primary}}>
-                      Play Local Video
+                      {isTV ? 'Play Local Video' : 'Play Local'}
                     </AppText>
                   </TVFocusable>
 
@@ -429,7 +443,7 @@ const Downloads = () => {
                       ref={selectButtonRef}
                       onLayout={updateSelectButtonNode}
                       accessibilityRole="button"
-                      accessibilityLabel="Select items"
+                      accessibilityLabel="Delete or select downloads"
                       nextFocusRight={selectButtonNode ?? undefined}
                       nextFocusUp={selectButtonNode ?? undefined}
                       nextFocusDown={firstCardNode ?? undefined}
@@ -449,21 +463,21 @@ const Downloads = () => {
                         gap: 6,
                         justifyContent: 'center',
                         minHeight: 36,
-                        paddingHorizontal: 14,
+                        paddingHorizontal: 12,
                       }}>
                       <MaterialCommunityIcons
-                        name="checkbox-multiple-marked-outline"
+                        name="trash-can-outline"
                         size={18}
                         color={colors.primary}
                       />
                       <AppText
                         role="labelLargeEmphasized"
                         style={{color: colors.primary}}>
-                        Select
+                        Delete
                       </AppText>
                     </TVFocusable>
                   ) : null}
-                </View>
+                </ScrollView>
               </View>
               <CurrentDownloadsSection
                 primary={colors.primary}

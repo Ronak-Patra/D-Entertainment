@@ -80,6 +80,8 @@ import StreamingTabBar from './components/navigation/StreamingTabBar';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import AppDialogHost from './components/AppDialogHost';
 import {RemoteVolumeToast} from './components/remote-player/RemoteVolumeToast';
+import Orientation from 'react-native-orientation-locker';
+import {useInAppPlayerStore} from './lib/zustand/inAppPlayerStore';
 import {
   getAnalytics,
   getCrashlytics,
@@ -497,6 +499,9 @@ const App = () => {
   );
 
   useEffect(() => {
+    if (!isTV) {
+      Orientation.lockToPortrait();
+    }
     syncParallelStreaming();
   }, []);
 
@@ -533,6 +538,12 @@ const App = () => {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', state => {
       if (state === 'active') {
+        if (!isTV) {
+          const playerState = useInAppPlayerStore.getState();
+          if (!playerState.isOpen || !playerState.isPlaying) {
+            Orientation.lockToPortrait();
+          }
+        }
         endUIInteraction('app-background');
         reconcileCompletedDownloadOutputs().catch(error =>
           console.warn('Download foreground reconciliation failed:', error),

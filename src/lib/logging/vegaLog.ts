@@ -74,7 +74,7 @@ let repeats = 0;
 
 const flushRepeats = () => {
   if (repeats > 0) {
-    pending.push([lastLevel, 'VegaJS', `(previous line repeated ${repeats} more times)`]);
+    pending.push([lastLevel, 'D-EntertainmentJS', `(previous line repeated ${repeats} more times)`]);
     repeats = 0;
   }
 };
@@ -92,7 +92,7 @@ const record = (level: number, args: unknown[]) => {
   lastLevel = level;
   if (message.length > MAX_LINE_CHARS)
     message = `${message.slice(0, MAX_LINE_CHARS)}… (${message.length} chars)`;
-  pending.push([level, 'VegaJS', message]);
+  pending.push([level, 'D-EntertainmentJS', message]);
   if (pending.length >= MAX_BATCH) flush();
   else if (!flushTimer) flushTimer = setTimeout(flush, FLUSH_INTERVAL_MS);
 };

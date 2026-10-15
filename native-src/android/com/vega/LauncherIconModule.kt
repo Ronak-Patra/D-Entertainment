@@ -74,7 +74,7 @@ class LauncherIconModule(reactContext: ReactApplicationContext) : ReactContextBa
     @ReactMethod
     fun enterGlobalPip(promise: Promise) {
         com.facebook.react.bridge.UiThreadUtil.runOnUiThread {
-            val activity = (reactApplicationContext.currentActivity as? MainActivity) ?: MainActivity.currentMainActivity
+            val activity = reactApplicationContext.currentActivity ?: MainActivity.currentMainActivity
             if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (activity.isInPictureInPictureMode) {
                     promise.resolve(true)
@@ -89,8 +89,10 @@ class LauncherIconModule(reactContext: ReactApplicationContext) : ReactContextBa
                     val height = metrics.heightPixels
                     val isPortrait = height > width
                     if (isPortrait) {
+                        val statusBarId = activity.resources.getIdentifier("status_bar_height", "dimen", "android")
+                        val statusBarHeight = if (statusBarId > 0) activity.resources.getDimensionPixelSize(statusBarId) else 0
                         val videoHeight = (width * 9) / 16
-                        builder.setSourceRectHint(android.graphics.Rect(0, 0, width, videoHeight))
+                        builder.setSourceRectHint(android.graphics.Rect(0, statusBarHeight, width, statusBarHeight + videoHeight))
                     } else {
                         builder.setSourceRectHint(android.graphics.Rect(0, 0, width, height))
                     }

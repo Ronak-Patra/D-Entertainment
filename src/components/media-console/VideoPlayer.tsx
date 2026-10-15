@@ -738,26 +738,29 @@ const AnimatedVideoPlayer = (
 
   const rewind = useCallback(
     (time?: number) => {
-      const newTime =
-        typeof time === 'number'
-          ? currentTime - time
-          : currentTime - rewindTime;
+      const base = currentTimeRef.current;
+      const newTime = Math.max(
+        0,
+        typeof time === 'number' ? base - time : base - rewindTime,
+      );
       setCurrentTime(newTime);
       videoRef?.current?.seek(newTime);
     },
-    [currentTime, rewindTime, videoRef],
+    [rewindTime, videoRef],
   );
 
   const forward = useCallback(
     (time?: number) => {
-      const newTime =
-        typeof time === 'number'
-          ? currentTime + time
-          : currentTime + rewindTime;
+      const base = currentTimeRef.current;
+      const maxTime = durationRef.current || Infinity;
+      const newTime = Math.min(
+        maxTime,
+        typeof time === 'number' ? base + time : base + rewindTime,
+      );
       setCurrentTime(newTime);
       videoRef?.current?.seek(newTime);
     },
-    [currentTime, rewindTime, videoRef],
+    [rewindTime, videoRef],
   );
 
   // Memoize onBuffer callback

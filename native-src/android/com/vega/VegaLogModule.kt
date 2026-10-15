@@ -52,14 +52,14 @@ class VegaLogModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
                 val context = reactApplicationContext
                 val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
                 val header = buildString {
-                    appendLine("Vega ${packageInfo.versionName} (${packageInfo.longVersionCodeCompat()})")
+                    appendLine("D Entertainment ${packageInfo.versionName} (${packageInfo.longVersionCodeCompat()})")
                     appendLine("Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
                     appendLine("Device ${Build.MANUFACTURER} ${Build.MODEL}")
                     appendLine("Detailed logging ${if (VegaLog.detailed) "on" else "off"}")
                     if (!extraHeader.isNullOrBlank()) appendLine(VegaLog.sanitize(extraHeader))
                     appendLine("----")
                 }
-                val file = File(context.cacheDir, "vega-logs.txt")
+                val file = File(context.cacheDir, "d-entertainment-logs.txt")
                 file.writeText(header + VegaLog.readAll())
                 val uri = FileProvider.getUriForFile(
                     context, "${context.packageName}.FileSystemFileProvider", file,
@@ -67,10 +67,10 @@ class VegaLogModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
                 val send = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_SUBJECT, "Vega logs")
+                    putExtra(Intent.EXTRA_SUBJECT, "D Entertainment logs")
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                val chooser = Intent.createChooser(send, "Share Vega logs").apply {
+                val chooser = Intent.createChooser(send, "Share D Entertainment logs").apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 (context.currentActivity ?: context).startActivity(chooser)

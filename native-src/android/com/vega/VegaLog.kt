@@ -96,8 +96,8 @@ object VegaLog {
         text.replace(urlQuery) { "${it.groupValues[1]}?…" }
             .replace(secretHeader) { "${it.groupValues[1]}${it.groupValues[2]}<hidden>" }
 
-    private fun current(dir: File) = File(dir, "vega-0.log")
-    private fun previous(dir: File) = File(dir, "vega-1.log")
+    private fun current(dir: File) = File(dir, "d-entertainment-0.log")
+    private fun previous(dir: File) = File(dir, "d-entertainment-1.log")
 
     private fun writeLoop() {
         while (true) {

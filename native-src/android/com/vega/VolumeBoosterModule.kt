@@ -1,73 +1,174 @@
 package com.vega
 
+import android.content.Context
+import android.media.AudioManager
 import android.media.audiofx.LoudnessEnhancer
 import android.util.Log
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import com.brentvatne.react.ReactNativeVideoManager
+import com.brentvatne.react.RNVPlugin
+import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.ReactPackage
-import com.facebook.react.bridge.NativeModule
 import com.facebook.react.uimanager.ViewManager
+import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "VolumeBooster"
 
 /**
- * VolumeBoosterModule: provides VLC-style audio loudness enhancement beyond 100% (up to 200%).
- * Uses Android's native LoudnessEnhancer audio effect on global output audio session (0).
+ * VolumeBoosterModule: provides audio loudness enhancement beyond 100% (up to 200%).
+ * Uses Android's native LoudnessEnhancer audio effect attached both directly to active
+ * ExoPlayer audio session IDs and to global session (0) with MODIFY_AUDIO_SETTINGS permission.
  */
-class VolumeBoosterModule(reactContext: ReactApplicationContext) :
-    ReactContextBaseJavaModule(reactContext) {
+class VolumeBoosterModule(private val reactContext: ReactApplicationContext) :
+    ReactContextBaseJavaModule(reactContext), RNVPlugin {
 
-    private var loudnessEnhancer: LoudnessEnhancer? = null
     private var currentBoost: Float = 1.0f
+    private val activePlayers = ConcurrentHashMap<String, ExoPlayer>()
+    private val activeEnhancers = ConcurrentHashMap<Int, LoudnessEnhancer>()
+
+    init {
+        try {
+            ReactNativeVideoManager.getInstance().registerPlugin(this)
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to register with ReactNativeVideoManager: ${e.message}")
+        }
+    }
 
     override fun getName(): String = "VolumeBooster"
 
-    @Synchronized
-    private fun getOrCreateEnhancer(): LoudnessEnhancer? {
-        if (loudnessEnhancer == null) {
-            try {
-                // Audio session 0 applies to media output mix
-                loudnessEnhancer = LoudnessEnhancer(0)
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to initialize LoudnessEnhancer: ${e.message}")
+    override fun onInstanceCreated(id: String, player: Any) {
+        if (player is ExoPlayer) {
+            activePlayers[id] = player
+            val sessionId = try { player.audioSessionId } catch (t: Throwable) { 0 }
+            if (sessionId > 0 && currentBoost > 1.0f) {
+                applyBoostToSession(sessionId, currentBoost)
+            }
+            player.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_READY && currentBoost > 1.0f) {
+                        val sid = try { player.audioSessionId } catch (t: Throwable) { 0 }
+                        if (sid > 0) {
+                            applyBoostToSession(sid, currentBoost)
+                        }
+                    }
+                }
+            })
+        }
+    }
+
+    override fun onInstanceRemoved(id: String, player: Any) {
+        activePlayers.remove(id)
+        if (player is ExoPlayer) {
+            val sessionId = try { player.audioSessionId } catch (t: Throwable) { 0 }
+            if (sessionId > 0) {
+                releaseEnhancer(sessionId)
             }
         }
-        return loudnessEnhancer
+    }
+
+    @Synchronized
+    private fun getOrCreateEnhancer(sessionId: Int): LoudnessEnhancer? {
+        var enhancer = activeEnhancers[sessionId]
+        if (enhancer == null) {
+            try {
+                enhancer = LoudnessEnhancer(sessionId)
+                activeEnhancers[sessionId] = enhancer
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to initialize LoudnessEnhancer for session $sessionId: ${e.message}")
+            }
+        }
+        return enhancer
+    }
+
+    private fun applyBoostToSession(sessionId: Int, boost: Float) {
+        val enhancer = getOrCreateEnhancer(sessionId) ?: return
+        try {
+            if (boost <= 1.0f) {
+                enhancer.enabled = false
+                enhancer.setTargetGain(0)
+            } else {
+                // Map 1.0..2.0 to 0..2500 mB (+25 dB gain for impactful, clear loudness boost)
+                val gainMb = ((boost - 1.0f) * 2500.0f).toInt()
+                enhancer.setTargetGain(gainMb)
+                if (!enhancer.enabled) {
+                    enhancer.enabled = true
+                }
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error applying enhancer to session $sessionId: ${e.message}")
+        }
+    }
+
+    private fun releaseEnhancer(sessionId: Int) {
+        activeEnhancers.remove(sessionId)?.let { enhancer ->
+            try {
+                enhancer.enabled = false
+                enhancer.release()
+            } catch (e: Throwable) {
+                // ignore
+            }
+        }
     }
 
     @ReactMethod
     fun setBoost(level: Double, promise: Promise) {
         try {
-            // level: 1.0 (100%, no boost) up to 2.0 (200% boost)
             val clamped = level.toFloat().coerceIn(1.0f, 2.0f)
             currentBoost = clamped
 
             if (clamped <= 1.0f) {
-                loudnessEnhancer?.let {
-                    it.enabled = false
-                    it.setTargetGain(0)
-                }
+                resetInternal()
                 promise.resolve(1.0)
                 return
             }
 
-            val enhancer = getOrCreateEnhancer()
-            if (enhancer != null) {
-                // Map 1.0..2.0 to 0..1800 mB (+18 dB gain, matching VLC's 200% ceiling)
-                val gainMb = ((clamped - 1.0f) * 1800.0f).toInt()
-                enhancer.setTargetGain(gainMb)
-                if (!enhancer.enabled) {
-                    enhancer.enabled = true
+            // Maximize system music volume when boosting
+            try {
+                val audioManager = reactContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                audioManager?.let { am ->
+                    val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                    am.setStreamVolume(AudioManager.STREAM_MUSIC, max, 0)
                 }
-                promise.resolve(clamped.toDouble())
-            } else {
-                promise.resolve(1.0)
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to set stream volume to max: ${e.message}")
             }
-        } catch (e: Exception) {
+
+            // Apply to global output mix session 0
+            applyBoostToSession(0, clamped)
+
+            // Apply to all active ExoPlayer instances
+            for (player in activePlayers.values) {
+                val sid = try { player.audioSessionId } catch (t: Throwable) { 0 }
+                if (sid > 0) {
+                    applyBoostToSession(sid, clamped)
+                }
+            }
+
+            // Also re-apply to all currently tracked enhancers
+            for ((sid, _) in activeEnhancers) {
+                applyBoostToSession(sid, clamped)
+            }
+
+            promise.resolve(clamped.toDouble())
+        } catch (e: Throwable) {
             Log.e(TAG, "Error setting volume boost: ${e.message}")
             promise.resolve(1.0)
+        }
+    }
+
+    private fun resetInternal() {
+        for ((_, enhancer) in activeEnhancers) {
+            try {
+                enhancer.enabled = false
+                enhancer.setTargetGain(0)
+            } catch (e: Throwable) {
+                // ignore
+            }
         }
     }
 
@@ -75,12 +176,9 @@ class VolumeBoosterModule(reactContext: ReactApplicationContext) :
     fun resetBoost(promise: Promise) {
         try {
             currentBoost = 1.0f
-            loudnessEnhancer?.let {
-                it.enabled = false
-                it.setTargetGain(0)
-            }
+            resetInternal()
             promise.resolve(true)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.resolve(false)
         }
     }
@@ -93,12 +191,20 @@ class VolumeBoosterModule(reactContext: ReactApplicationContext) :
     override fun onCatalystInstanceDestroy() {
         super.onCatalystInstanceDestroy()
         try {
-            loudnessEnhancer?.enabled = false
-            loudnessEnhancer?.release()
-            loudnessEnhancer = null
-        } catch (e: Exception) {
+            ReactNativeVideoManager.getInstance().unregisterPlugin(this)
+        } catch (e: Throwable) {
             // ignore
         }
+        for ((_, enhancer) in activeEnhancers) {
+            try {
+                enhancer.enabled = false
+                enhancer.release()
+            } catch (e: Throwable) {
+                // ignore
+            }
+        }
+        activeEnhancers.clear()
+        activePlayers.clear()
     }
 }
 

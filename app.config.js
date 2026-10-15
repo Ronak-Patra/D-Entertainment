@@ -167,6 +167,7 @@ module.exports = () => {
           'WRITE_SETTINGS',
           'WAKE_LOCK',
           'POST_NOTIFICATIONS',
+          'MODIFY_AUDIO_SETTINGS',
         ],
         blockedPermissions: [
           'android.permission.MANAGE_EXTERNAL_STORAGE',

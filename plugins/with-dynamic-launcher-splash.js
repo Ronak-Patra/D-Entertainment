@@ -149,8 +149,10 @@ const pipAndThemeMethods = `  companion object {
           val height = metrics.heightPixels
           val isPortrait = height > width
           if (isPortrait) {
+            val statusBarId = resources.getIdentifier("status_bar_height", "dimen", "android")
+            val statusBarHeight = if (statusBarId > 0) resources.getDimensionPixelSize(statusBarId) else 0
             val videoHeight = (width * 9) / 16
-            builder.setSourceRectHint(android.graphics.Rect(0, 0, width, videoHeight))
+            builder.setSourceRectHint(android.graphics.Rect(0, statusBarHeight, width, statusBarHeight + videoHeight))
           } else {
             builder.setSourceRectHint(android.graphics.Rect(0, 0, width, height))
           }
@@ -199,6 +201,23 @@ const pipAndThemeMethods = `  companion object {
     currentMainActivity = this
     if (isVideoPlaying) {
       updatePipParams(true)
+    } else {
+      val uiModeManager = getSystemService(android.content.Context.UI_MODE_SERVICE) as? android.app.UiModeManager
+      val isTv = uiModeManager?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+      if (!isTv) {
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+      }
+    }
+  }
+
+  override fun onPause() {
+    super.onPause()
+    if (!isVideoPlaying) {
+      val uiModeManager = getSystemService(android.content.Context.UI_MODE_SERVICE) as? android.app.UiModeManager
+      val isTv = uiModeManager?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+      if (!isTv) {
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+      }
     }
   }
 
@@ -221,8 +240,10 @@ const pipAndThemeMethods = `  companion object {
           val height = metrics.heightPixels
           val isPortrait = height > width
           if (isPortrait) {
+            val statusBarId = resources.getIdentifier("status_bar_height", "dimen", "android")
+            val statusBarHeight = if (statusBarId > 0) resources.getDimensionPixelSize(statusBarId) else 0
             val videoHeight = (width * 9) / 16
-            builder.setSourceRectHint(android.graphics.Rect(0, 0, width, videoHeight))
+            builder.setSourceRectHint(android.graphics.Rect(0, statusBarHeight, width, statusBarHeight + videoHeight))
           } else {
             builder.setSourceRectHint(android.graphics.Rect(0, 0, width, height))
           }

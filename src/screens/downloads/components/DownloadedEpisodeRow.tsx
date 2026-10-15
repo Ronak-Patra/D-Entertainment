@@ -79,7 +79,9 @@ export const DownloadedEpisodeRow: React.FC<DownloadedEpisodeRowProps> = ({
   const playControlRef = useRef<View>(null);
 
   return (
-    <View className="mb-3 w-full flex-row items-stretch gap-2">
+    <View
+      className="mb-3 flex-row items-stretch gap-2"
+      style={{width: '100%', maxWidth: '100%', alignSelf: 'stretch'}}>
       <TVFocusable
         ref={playControlRef}
         accessibilityRole="button"
@@ -93,6 +95,8 @@ export const DownloadedEpisodeRow: React.FC<DownloadedEpisodeRowProps> = ({
         focusBorderColor={focusBorderColor}
         style={{
           flex: 1,
+          flexShrink: 1,
+          minWidth: 0,
           height: 64,
           backgroundColor: colors.surfaceContainerHigh,
           borderColor: colors.outlineVariant,
@@ -100,27 +104,31 @@ export const DownloadedEpisodeRow: React.FC<DownloadedEpisodeRowProps> = ({
           borderWidth: 1,
           flexDirection: 'row',
           alignItems: 'center',
-          paddingHorizontal: 16,
+          paddingHorizontal: 12,
         }}>
         <DownloadedItemThumbnail item={item} />
-        <View className="ml-3 flex-1">
+        <View className="ml-3 flex-1" style={{minWidth: 0, flexShrink: 1}}>
           <Text
             className="font-semibold"
             style={{color: colors.onSurface}}
-            numberOfLines={1}>
+            numberOfLines={1}
+            ellipsizeMode="tail">
             {item.episodeName || item.title}
           </Text>
           <Text
             className="mt-1 text-xs"
-            style={{color: colors.onSurfaceVariant}}>
+            style={{color: colors.onSurfaceVariant}}
+            numberOfLines={1}
+            ellipsizeMode="tail">
             {totalItems > 1 ? `Episode ${index + 1}  ·  ` : ''}
             {formatDownloadBytes(item.totalBytes)}
           </Text>
         </View>
         <MaterialCommunityIcons
           name="chevron-right"
-          size={22}
+          size={20}
           color={colors.onSurfaceVariant}
+          style={{flexShrink: 0, marginLeft: 4}}
         />
       </TVFocusable>
 
@@ -134,7 +142,8 @@ export const DownloadedEpisodeRow: React.FC<DownloadedEpisodeRowProps> = ({
         focusBorderColor="#FFFFFF"
         style={{
           height: 64,
-          width: 64,
+          width: 52,
+          flexShrink: 0,
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: colors.errorContainer,
@@ -146,7 +155,7 @@ export const DownloadedEpisodeRow: React.FC<DownloadedEpisodeRowProps> = ({
         ) : (
           <MaterialCommunityIcons
             name="delete-outline"
-            size={26}
+            size={24}
             color={colors.onErrorContainer}
           />
         )}

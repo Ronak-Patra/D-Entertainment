@@ -352,7 +352,11 @@ const Gestures = ({
   const [isLeftRipple, setIsLeftRipple] = useState(false);
   const [totalSkipTime, setTotalSkipTime] = useState(0);
   const [displayVolume, setDisplayVolume] = useState(0);
-  const [displayBrightness, setDisplayBrightness] = useState(0);
+  const initialBrightness = useMemo(
+    () => settingsStorage.getPlayerBrightness() ?? 0.5,
+    [],
+  );
+  const [displayBrightness, setDisplayBrightness] = useState(initialBrightness);
   const [isVolumeVisible, setIsVolumeVisible] = useState(false);
   const [isBrightnessVisible, setIsBrightnessVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -373,7 +377,7 @@ const Gestures = ({
   const lastTapTimeRef = useRef(0);
   const originalSettings = useRef({
     volume: 0,
-    brightness: 0,
+    brightness: initialBrightness,
   });
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -385,13 +389,14 @@ const Gestures = ({
   // below never updates on rotation. Falls back to the window until first layout.
   const gestureWidth = useSharedValue(0);
   const volumeValue = useSharedValue(0);
-  const brightnessValue = useSharedValue(0);
+  const brightnessValue = useSharedValue(initialBrightness);
   const startVolume = useSharedValue(0);
-  const startBrightness = useSharedValue(0);
+  const startBrightness = useSharedValue(initialBrightness);
   const toastOpacity = useSharedValue(0);
   const is2xActiveShared = useSharedValue(false);
   const isPanActive = useSharedValue(false);
   const panDirection = useSharedValue<'horizontal' | 'vertical' | null>(null);
+  const horizontalSeekDelta = useSharedValue(0);
 
   // Toast styles (inline, no Tailwind)
   const toastAnimatedStyle = useAnimatedStyle(
@@ -443,16 +448,20 @@ const Gestures = ({
     });
   }, [toastOpacity]);
 
-  const applySwipeSeek = useCallback(() => {
-    if (seekDelta !== 0) {
-      if (seekDelta > 0) {
-        forward(seekDelta);
-      } else {
-        rewind(Math.abs(seekDelta));
+  const handleApplySwipeSeek = useCallback(
+    (delta: number) => {
+      if (delta !== 0) {
+        if (delta > 0) {
+          forward(delta);
+        } else {
+          rewind(Math.abs(delta));
+        }
       }
       setSeekDelta(0);
-    }
-  }, [seekDelta, forward, rewind]);
+      setIsSeekVisible(false);
+    },
+    [forward, rewind],
+  );
 
   const start2x = useCallback(() => {
     if (
@@ -709,8 +718,9 @@ const Gestures = ({
 
   const updateSystemBrightness = useCallback((newBrightness: number) => {
     const clampedBrightness = Math.max(0, Math.min(1, newBrightness));
-    Brightness.setBrightnessAsync(clampedBrightness);
+    Brightness.setBrightnessAsync(clampedBrightness).catch(() => {});
     setDisplayBrightness(clampedBrightness);
+    settingsStorage.setPlayerBrightness(clampedBrightness);
   }, []);
 
   const panGesture = useMemo(
@@ -755,6 +765,9 @@ const Gestures = ({
           }
           isPanActive.value = true;
           panDirection.value = null;
+          horizontalSeekDelta.value = 0;
+          runOnJS(setSeekDelta)(0);
+          runOnJS(setIsSeekVisible)(false);
           runOnJS(cancel2x)();
           const isLeftSide = event.x < (gestureWidth.value || SCREEN_WIDTH) / 2;
 
@@ -809,6 +822,7 @@ const Gestures = ({
           } else if (panDirection.value === 'horizontal') {
             // 5 pixels = 1 second
             const deltaSeconds = Math.round(event.translationX / 5);
+            horizontalSeekDelta.value = deltaSeconds;
             runOnJS(setSeekDelta)(deltaSeconds);
           }
         })
@@ -819,10 +833,12 @@ const Gestures = ({
           runOnJS(handleTouchUp)();
           runOnJS(setIsVolumeVisible)(false);
           runOnJS(setIsBrightnessVisible)(false);
-          runOnJS(setIsSeekVisible)(false);
 
           if (panDirection.value === 'horizontal') {
-            runOnJS(applySwipeSeek)();
+            const finalDelta = horizontalSeekDelta.value;
+            runOnJS(handleApplySwipeSeek)(finalDelta);
+          } else {
+            runOnJS(setIsSeekVisible)(false);
           }
           panDirection.value = null;
         }),
@@ -833,12 +849,14 @@ const Gestures = ({
       is2xActiveShared,
       isPanActive,
       panDirection,
+      horizontalSeekDelta,
       handleTouchDown,
       handleTouchMove,
       handleTouchUp,
       cancel2x,
       updateSystemBrightness,
       updateVolumeWithBoost,
+      handleApplySwipeSeek,
     ],
   );
 
@@ -848,31 +866,49 @@ const Gestures = ({
 
     const initializeSettings = async () => {
       try {
-        const [currentVolume, currentBrightness] = await Promise.all([
-          VolumeManager.getVolume(),
-          Brightness.getBrightnessAsync(),
+        const volumePromise = VolumeManager.getVolume().catch(() => ({ volume: 0.5 }));
+        const brightnessPromise = Brightness.getBrightnessAsync().catch(() => null);
+
+        const [currentVolume, fetchedBrightness] = await Promise.all([
+          volumePromise,
+          brightnessPromise,
         ]);
 
         if (mounted) {
+          const savedBrightness = settingsStorage.getPlayerBrightness();
+          let effectiveBrightness = 0.5;
+
+          if (savedBrightness !== null) {
+            effectiveBrightness = savedBrightness;
+          } else if (
+            typeof fetchedBrightness === 'number' &&
+            Number.isFinite(fetchedBrightness) &&
+            fetchedBrightness > 0.05 &&
+            fetchedBrightness < 0.95
+          ) {
+            // Valid non-extreme system brightness
+            effectiveBrightness = fetchedBrightness;
+          } else {
+            // Default to 50% when system brightness is 100%, 0%, or undetermined/automatic
+            effectiveBrightness = 0.5;
+          }
+
+          const vol = currentVolume?.volume ?? 0.5;
+
           // Store original values
           originalSettings.current = {
-            volume: currentVolume.volume,
-            brightness: currentBrightness,
+            volume: vol,
+            brightness: effectiveBrightness,
           };
 
           // Set initial values
-          volumeValue.value = currentVolume.volume;
-          brightnessValue.value = currentBrightness;
-          setDisplayVolume(currentVolume.volume);
-          setDisplayBrightness(currentBrightness);
-
-          console.log('Original settings stored:🔥', {
-            volume: currentVolume,
-            brightness: currentBrightness,
-          });
+          volumeValue.value = vol;
+          brightnessValue.value = effectiveBrightness;
+          setDisplayVolume(vol);
+          setDisplayBrightness(effectiveBrightness);
         }
       } catch (error) {
-        console.error('Error initializing settings:', error);
+        console.warn('Error initializing settings:', error);
       }
     };
 
@@ -887,6 +923,7 @@ const Gestures = ({
   useEffect(() => {
     return () => {
       resetVolumeBoost();
+      Brightness.restoreSystemBrightnessAsync().catch(() => {});
       if (skipTimeoutRef.current) {
         clearTimeout(skipTimeoutRef.current);
       }
@@ -1012,18 +1049,30 @@ const Gestures = ({
           totalTime={totalSkipTime}
         />
         {isSeekVisible && seekDelta !== 0 && (
-          <View style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: [{ translateX: -40 }, { translateY: -20 }],
-            backgroundColor: 'rgba(0,0,0,0.6)',
-            padding: 10,
-            borderRadius: 8,
-            alignItems: 'center',
-            zIndex: 2000
-          }}>
-            <Text style={{ color: 'white', fontSize: 20, fontWeight: 'bold' }}>
+          <View
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              marginTop: -32,
+              marginLeft: -64,
+              width: 128,
+              backgroundColor: 'rgba(0,0,0,0.75)',
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              borderRadius: 16,
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'row',
+              gap: 8,
+              zIndex: 2000,
+            }}>
+            <Icon
+              name={seekDelta > 0 ? 'fast-forward' : 'fast-rewind'}
+              size={24}
+              color="white"
+            />
+            <Text style={{ color: 'white', fontSize: 18, fontWeight: '700' }}>
               {seekDelta > 0 ? `+${seekDelta}s` : `${seekDelta}s`}
             </Text>
           </View>
